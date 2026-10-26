@@ -1,0 +1,13 @@
+# PyTorch is installed separately in the Dockerfile (CPU-only build).
+fastapi>=0.110
+uvicorn>=0.29
+numpy>=1.26
+matplotlib>=3.8
+rasterio>=1.3.9
+geopandas>=0.14
+shapely>=2.0
+pyproj>=3.6
+odc-stac>=0.3.10
+pystac-client>=0.8
+planetary-computer>=1.0
+segmentation-models-pytorch>=0.3.4

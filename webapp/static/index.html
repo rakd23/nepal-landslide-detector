@@ -1,0 +1,847 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nepal Landslide Detector</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+  :root {
+    --bg: #0f1214;
+    --panel: #161a1d;
+    --panel-2: #1e2327;
+    --panel-3: #262c31;
+    --line: #2b3237;
+    --text: #e8ecef;
+    --muted: #8d989f;
+    --accent: #ff5a36;
+    --accent-soft: rgba(255, 90, 54, 0.16);
+    --pick: #ffc53d;
+    --site: #35d0e0;
+    --ok: #4cc38a;
+    --bad: #ff8f78;
+    --removed: #b7c0c7;
+    --radius: 10px;
+    color-scheme: dark;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); }
+  body { display: flex; }
+  button, input, select { font: inherit; color: inherit; }
+
+  #panel {
+    width: 370px; flex-shrink: 0; height: 100%; overflow-y: auto;
+    background: var(--panel); border-right: 1px solid var(--line);
+    padding: 20px 18px 28px;
+  }
+  #map { flex: 1; height: 100%; }
+  #map.picking { cursor: crosshair; }
+
+  h1 { font-size: 19px; margin: 0 0 4px; letter-spacing: -0.01em; }
+  .sub { color: var(--muted); font-size: 13px; margin: 0 0 16px; line-height: 1.45; }
+  h2 {
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--muted); margin: 22px 0 10px; font-weight: 600;
+  }
+
+  .tabs { display: flex; border-bottom: 1px solid var(--line); margin: 0 -18px 4px; padding: 0 18px; }
+  .tabs button {
+    border: 0; background: none; padding: 10px 2px; margin-right: 18px; font-size: 14px;
+    color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px;
+  }
+  .tabs button.on { color: var(--text); border-bottom-color: var(--accent); }
+  .tab { display: none; }
+  .tab.on { display: block; }
+
+  /* runs list */
+  #runs { display: flex; flex-direction: column; gap: 6px; }
+  .run {
+    display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; align-items: center;
+    background: var(--panel-2); border: 1px solid transparent; border-radius: var(--radius);
+    padding: 9px 11px; cursor: pointer;
+  }
+  .run:hover { background: var(--panel-3); }
+  .run.on { border-color: var(--accent); }
+  .run .nm { font-size: 13.5px; font-weight: 550; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .run .meta { grid-column: 1 / 2; font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .run .side { grid-row: 1 / 3; grid-column: 2; display: flex; align-items: center; gap: 6px; }
+  .chip { font-size: 11px; padding: 3px 7px; border-radius: 999px; background: var(--panel-3); color: var(--muted); white-space: nowrap; }
+  .chip.done { color: var(--ok); }
+  .chip.failed { color: var(--bad); }
+  .chip.running, .chip.queued { color: var(--pick); }
+  .del {
+    border: 0; background: none; color: var(--muted); cursor: pointer; font-size: 17px; line-height: 1;
+    padding: 2px 4px; border-radius: 5px;
+  }
+  .del:hover { color: var(--text); background: var(--line); }
+
+  .status-box {
+    display: flex; gap: 10px; align-items: flex-start; font-size: 13px; line-height: 1.45;
+    background: var(--panel-2); border-radius: var(--radius); padding: 11px 12px; margin-top: 14px;
+  }
+  .status-box.failed { background: var(--accent-soft); color: #ffb3a3; }
+  .spinner {
+    width: 15px; height: 15px; flex-shrink: 0; margin-top: 1px; border-radius: 50%;
+    border: 2px solid var(--line); border-top-color: var(--pick); animation: spin 0.9s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 14px; }
+  .stat { background: var(--panel-2); border-radius: var(--radius); padding: 10px 12px; }
+  .stat .v { font-size: 21px; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .stat .k { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+  .settings { font-size: 12px; color: var(--muted); line-height: 1.55; margin-top: 10px; }
+
+  .dates { display: flex; align-items: center; gap: 8px; font-size: 13px; font-variant-numeric: tabular-nums; flex-wrap: wrap; }
+  .dates span { background: var(--panel-2); padding: 6px 9px; border-radius: 7px; }
+  .dates .arrow { background: none; color: var(--muted); padding: 0; }
+
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 9px 0; font-size: 13.5px; }
+  .row label { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+  input[type=checkbox] { accent-color: var(--accent); width: 15px; height: 15px; }
+  input[type=range] { width: 100%; accent-color: var(--accent); }
+  .val { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 12.5px; }
+
+  .seg { display: flex; background: var(--panel-2); border-radius: 8px; padding: 3px; margin: 8px 0; }
+  .seg button {
+    flex: 1; border: 0; background: none; color: var(--muted); font-size: 13px;
+    padding: 6px 0; border-radius: 6px; cursor: pointer;
+  }
+  .seg button.on { background: var(--line); color: var(--text); }
+  .seg button:disabled { opacity: 0.35; cursor: not-allowed; }
+  .seg-label { font-size: 12px; color: var(--muted); margin-top: 12px; }
+
+  .legend-bar {
+    height: 8px; border-radius: 4px; margin-top: 6px;
+    background: linear-gradient(90deg, #160b39, #6a176e, #bc3754, #f37819, #fcffa4);
+  }
+  .legend-ticks { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); margin-top: 4px; }
+  .swatch { display: inline-block; width: 14px; height: 10px; border-radius: 2px; vertical-align: -1px; }
+
+  /* review */
+  .review-box { background: var(--panel-2); border-radius: var(--radius); padding: 12px; }
+  .review-top { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+  .review-top .big { font-size: 21px; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .review-top .small { font-size: 12px; color: var(--muted); }
+  .bar { display: flex; height: 6px; border-radius: 3px; overflow: hidden; background: var(--panel-3); margin: 10px 0 8px; }
+  .bar .r { background: var(--ok); }
+  .bar .f { background: var(--bad); }
+  .review-actions { display: flex; gap: 8px; margin-top: 10px; }
+  .review-actions .btn { flex: 1; text-align: center; text-decoration: none; }
+
+  #list { list-style: none; margin: 0; padding: 0; }
+  #list li {
+    display: grid; grid-template-columns: 34px 1fr auto 16px; gap: 8px; align-items: center;
+    padding: 8px; border-radius: 8px; cursor: pointer; font-size: 13px;
+  }
+  #list li:hover, #list li.active { background: var(--panel-2); }
+  #list .n { color: var(--muted); font-variant-numeric: tabular-nums; }
+  #list .a { font-variant-numeric: tabular-nums; }
+  #list .p { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; border: 1.5px solid var(--line); justify-self: center; }
+  .dot.real { background: var(--ok); border-color: var(--ok); }
+  .dot.false { background: var(--bad); border-color: var(--bad); }
+  .empty { font-size: 13px; color: var(--muted); line-height: 1.5; }
+
+  /* form */
+  .field { margin-bottom: 12px; display: block; }
+  .field > span { display: block; font-size: 12px; color: var(--muted); margin-bottom: 5px; }
+  .field input:not([type=checkbox]), .field select {
+    width: 100%; background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px;
+    padding: 8px 10px; font-size: 13.5px; outline: none;
+  }
+  .field input:focus, .field select:focus { border-color: var(--muted); }
+  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .loc { display: grid; grid-template-columns: 1fr 1fr auto; gap: 8px; }
+  .btn {
+    border: 1px solid var(--line); background: var(--panel-2); border-radius: 8px;
+    padding: 8px 12px; font-size: 13.5px; cursor: pointer; white-space: nowrap; color: var(--text);
+  }
+  .btn:hover { background: var(--panel-3); }
+  .btn.picking { border-color: var(--pick); color: var(--pick); }
+  .btn.primary {
+    width: 100%; background: var(--accent); border-color: var(--accent); color: #fff;
+    font-weight: 600; padding: 11px; margin-top: 6px;
+  }
+  .btn.primary:hover { filter: brightness(1.08); }
+  .btn.primary:disabled { opacity: 0.5; cursor: not-allowed; filter: none; }
+  .hint { font-size: 12px; color: var(--muted); line-height: 1.5; margin: 4px 0 12px; }
+  .form-error { font-size: 13px; color: #ffb3a3; background: var(--accent-soft); border-radius: 8px; padding: 9px 11px; margin-top: 10px; }
+
+  details.adv { border: 1px solid var(--line); border-radius: var(--radius); padding: 0 12px; margin: 16px 0 6px; }
+  details.adv summary { cursor: pointer; padding: 11px 0; font-size: 13.5px; list-style: none; display: flex; justify-content: space-between; }
+  details.adv summary::-webkit-details-marker { display: none; }
+  details.adv summary::after { content: "+"; color: var(--muted); }
+  details.adv[open] summary::after { content: "–"; }
+  details.adv .inner { padding-bottom: 6px; }
+  .check { display: grid; grid-template-columns: auto 1fr 74px; gap: 8px; align-items: center; margin: 8px 0; font-size: 13px; }
+  .check input[type=number] { background: var(--panel-2); border: 1px solid var(--line); border-radius: 7px; padding: 5px 7px; font-size: 13px; width: 100%; }
+  .check small { display: block; color: var(--muted); font-size: 11.5px; }
+
+  .note { font-size: 11.5px; color: var(--muted); line-height: 1.5; margin-top: 22px; }
+
+  .leaflet-popup-content-wrapper, .leaflet-popup-tip { background: var(--panel); color: var(--text); }
+  .leaflet-popup-content { font-size: 13px; line-height: 1.5; margin: 12px 14px; min-width: 210px; }
+  .leaflet-popup-content b { font-size: 14px; }
+  .leaflet-container a.leaflet-popup-close-button { color: var(--muted); }
+  .pop-actions { display: flex; gap: 6px; margin-top: 10px; }
+  .pop-actions button {
+    flex: 1; border: 1px solid var(--line); background: var(--panel-2); color: var(--text);
+    border-radius: 7px; padding: 6px 4px; font-size: 12.5px; cursor: pointer;
+  }
+  .pop-actions button:hover { background: var(--panel-3); }
+  .pop-actions button.on-real { background: var(--ok); border-color: var(--ok); color: #08130d; }
+  .pop-actions button.on-false { background: var(--bad); border-color: var(--bad); color: #1a0904; }
+  .pop-muted { color: var(--muted); font-size: 12px; }
+
+  @media (max-width: 760px) {
+    body { flex-direction: column-reverse; }
+    #panel { width: 100%; height: 50vh; border-right: 0; border-top: 1px solid var(--line); padding: 14px 16px 24px; }
+    #map { height: 50vh; flex: none; }
+  }
+</style>
+</head>
+<body>
+
+<aside id="panel">
+  <h1>Nepal Landslide Detector</h1>
+  <p class="sub">A U-Net trained on Landslide4Sense finds landslides that appear between two Sentinel-2 images.</p>
+
+  <nav class="tabs">
+    <button data-tab="results" class="on">Results</button>
+    <button data-tab="new">New detection</button>
+  </nav>
+
+  <!-- RESULTS -->
+  <section class="tab on" id="tab-results">
+    <h2>Runs</h2>
+    <div id="runs"><p class="empty">Loading…</p></div>
+
+    <div id="detail">
+      <div id="status"></div>
+
+      <div id="result-body">
+        <div class="stats">
+          <div class="stat"><div class="v" id="s-count">–</div><div class="k">new landslides shown</div></div>
+          <div class="stat"><div class="v" id="s-area">–</div><div class="k">total area</div></div>
+          <div class="stat"><div class="v" id="s-removed">–</div><div class="k">removed as false alarms</div></div>
+          <div class="stat"><div class="v" id="s-f1">–</div><div class="k">model F1 (validation)</div></div>
+        </div>
+        <div class="settings" id="settings"></div>
+
+        <h2>Imagery used</h2>
+        <div class="dates"><span id="d-before">–</span><span class="arrow">→</span><span id="d-after">–</span></div>
+
+        <h2>Check the detections</h2>
+        <div class="review-box">
+          <div class="review-top">
+            <div><div class="big" id="rv-precision">–</div><div class="small">precision from your reviews</div></div>
+            <div class="small" id="rv-counts">0 reviewed</div>
+          </div>
+          <div class="bar"><div class="r" id="rv-bar-r" style="width:0"></div><div class="f" id="rv-bar-f" style="width:0"></div></div>
+          <div class="small" style="color:var(--muted);font-size:12px;line-height:1.45">
+            Open a detection, compare the before and after images, and mark it as a real landslide or a false alarm.
+          </div>
+          <div class="review-actions">
+            <button class="btn" id="next-unreviewed" type="button">Review next</button>
+            <a class="btn" id="download" href="#" download>Download GeoJSON</a>
+          </div>
+        </div>
+
+        <h2>Layers</h2>
+        <div class="seg-label">Background</div>
+        <div class="seg" id="basemap">
+          <button data-k="satellite" class="on">Satellite</button>
+          <button data-k="streets">Streets</button>
+        </div>
+        <div class="seg-label">Sentinel-2 image used by the model</div>
+        <div class="seg" id="s2img">
+          <button data-k="off" class="on">Off</button>
+          <button data-k="before">Before</button>
+          <button data-k="after">After</button>
+        </div>
+        <div class="row"><label><input type="checkbox" id="t-outlines" checked> <span class="swatch" style="background:#ff5a36"></span> Detected landslides</label></div>
+        <div class="row"><label><input type="checkbox" id="t-removed"> <span class="swatch" style="border:1.5px dashed #b7c0c7"></span> Removed by filters</label></div>
+        <div class="row"><label><input type="checkbox" id="t-prob"> Probability heatmap</label></div>
+        <div class="row"><span>Heatmap opacity</span><span class="val" id="v-opacity">80%</span></div>
+        <input type="range" id="r-opacity" min="0" max="100" value="80">
+        <div class="legend-bar"></div>
+        <div class="legend-ticks"><span>0.2</span><span>0.5</span><span>1.0</span></div>
+
+        <h2>Filter</h2>
+        <div class="row"><span>Minimum confidence</span><span class="val" id="v-conf">–</span></div>
+        <input type="range" id="r-conf" min="0" max="100" value="0">
+
+        <h2>Largest detections</h2>
+        <ul id="list"></ul>
+      </div>
+    </div>
+
+    <p class="note">
+      A "new landslide" is a spot the model flags in the after image but not in the before image,
+      on a slope, with vegetation loss, and away from rivers. Detections are unverified until you review them.
+    </p>
+  </section>
+
+  <!-- NEW DETECTION -->
+  <section class="tab" id="tab-new">
+    <form id="form" autocomplete="off">
+      <h2>Start from an example</h2>
+      <label class="field">
+        <select id="preset">
+          <option value="">Choose a past event…</option>
+          <option value="jhyaple">Jhyaple Khola landslide, Sep 2024 storm</option>
+          <option value="melamchi">Melamchi flood and debris flow, Jun 2021</option>
+          <option value="jajarkot">Jajarkot earthquake, Nov 2023</option>
+        </select>
+      </label>
+
+      <h2>Location</h2>
+      <div class="loc">
+        <label class="field"><span>Latitude</span><input id="f-lat" type="number" step="0.0001" placeholder="27.7115"></label>
+        <label class="field"><span>Longitude</span><input id="f-lon" type="number" step="0.0001" placeholder="85.2024"></label>
+        <div class="field"><span>&nbsp;</span><button type="button" class="btn" id="pick">Pick on map</button></div>
+      </div>
+      <div class="pair">
+        <label class="field"><span>Name (optional)</span><input id="f-name" maxlength="80" placeholder="e.g. Roshi, Kavre"></label>
+        <label class="field"><span>Area size</span>
+          <select id="f-size">
+            <option value="2.5">5 × 5 km</option>
+            <option value="5" selected>10 × 10 km</option>
+            <option value="7.5">15 × 15 km</option>
+            <option value="10">20 × 20 km</option>
+          </select>
+        </label>
+      </div>
+
+      <h2>Before the event</h2>
+      <div class="pair">
+        <label class="field"><span>From</span><input id="f-bs" type="date" required></label>
+        <label class="field"><span>To</span><input id="f-be" type="date" required></label>
+      </div>
+      <h2>After the event</h2>
+      <div class="pair">
+        <label class="field"><span>From</span><input id="f-as" type="date" required></label>
+        <label class="field"><span>To</span><input id="f-ae" type="date" required></label>
+      </div>
+      <p class="hint">
+        The app picks the clearest image in each range. Use dry-season months (about October to February),
+        ideally the same months in both ranges. Runs take a few minutes, one at a time.
+      </p>
+
+      <details class="adv">
+        <summary>Model and false-alarm filters</summary>
+        <div class="inner">
+          <label class="field"><span>Model</span><select id="f-model"></select></label>
+          <label class="field"><span>How to match new imagery to the training data</span>
+            <select id="f-norm">
+              <option value="quantile">Match training distribution (quantile)</option>
+              <option value="zscore">Rescale each image (z-score)</option>
+            </select>
+          </label>
+          <label class="check"><input type="checkbox" id="f-tta" checked>
+            <span>Average flipped predictions<small>Test-time augmentation: slower, steadier</small></span><span></span></label>
+
+          <div class="seg-label" style="margin-top:14px">Remove detections that are…</div>
+          <label class="check"><input type="checkbox" id="f-slope" checked>
+            <span>on gentle slopes<small>average slope below (°)</small></span>
+            <input type="number" id="f-slope-v" min="0" max="45" step="1"></label>
+          <label class="check"><input type="checkbox" id="f-veg" checked>
+            <span>without vegetation loss<small>NDVI must drop by at least</small></span>
+            <input type="number" id="f-veg-v" min="0" max="1" step="0.05"></label>
+          <label class="check"><input type="checkbox" id="f-water" checked>
+            <span>mostly water<small>water share above</small></span>
+            <input type="number" id="f-water-v" min="0" max="1" step="0.05"></label>
+        </div>
+      </details>
+
+      <button class="btn primary" id="submit" type="submit">Run detection</button>
+      <div id="form-error"></div>
+    </form>
+  </section>
+</aside>
+
+<div id="map"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const PRESETS = {
+  jhyaple:  { name: "Jhyaple Khola (Sep 2024)", lat: 27.7115, lon: 85.2024, size: "5",
+              bs: "2023-10-15", be: "2024-02-15", as: "2024-10-15", ae: "2025-02-15" },
+  melamchi: { name: "Melamchi (Jun 2021)", lat: 27.83, lon: 85.58, size: "5",
+              bs: "2020-10-15", be: "2021-02-15", as: "2021-10-15", ae: "2022-02-15" },
+  jajarkot: { name: "Jajarkot earthquake (Nov 2023)", lat: 28.848, lon: 82.187, size: "5",
+              bs: "2023-10-01", be: "2023-11-02", as: "2023-11-05", ae: "2024-02-15" },
+};
+const NORM_LABEL = { quantile: "quantile matching", zscore: "per-image z-score" };
+
+const $ = id => document.getElementById(id);
+const fmtArea = m2 => m2 >= 1e6 ? (m2 / 1e6).toFixed(2) + " km²" : Math.round(m2).toLocaleString() + " m²";
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+// ------------------------------------------------------------------ map
+
+const map = L.map("map", { zoomControl: false }).setView([28.2, 84.1], 7);
+L.control.zoom({ position: "topright" }).addTo(map);
+L.control.scale({ position: "bottomright", imperial: false }).addTo(map);
+
+const basemaps = {
+  satellite: L.tileLayer(
+    "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+    { maxZoom: 19, attribution: "Imagery © Esri, Maxar, Earthstar Geographics" }),
+  streets: L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+    { maxZoom: 19, attribution: "© OpenStreetMap contributors" }),
+};
+basemaps.satellite.addTo(map);
+
+const runLayers = L.layerGroup().addTo(map);
+const removedLayer = L.layerGroup().addTo(map);
+const outlineLayer = L.layerGroup().addTo(map);
+let probLayer = null, s2Layers = {};
+const pickLayer = L.layerGroup().addTo(map);
+
+function segmented(id, onChange) {
+  const btns = document.querySelectorAll(`#${id} button`);
+  btns.forEach(btn => btn.addEventListener("click", () => {
+    if (btn.disabled) return;
+    btns.forEach(b => b.classList.toggle("on", b === btn));
+    onChange(btn.dataset.k);
+  }));
+  return k => btns.forEach(b => b.classList.toggle("on", b.dataset.k === k));
+}
+segmented("basemap", k => Object.entries(basemaps).forEach(([name, layer]) =>
+  name === k ? layer.addTo(map).bringToBack() : map.removeLayer(layer)));
+const setS2 = segmented("s2img", showS2);
+function showS2(k) {
+  Object.values(s2Layers).forEach(l => map.removeLayer(l));
+  if (s2Layers[k]) s2Layers[k].addTo(map);
+  if (probLayer && map.hasLayer(probLayer)) probLayer.bringToFront();
+}
+
+// ------------------------------------------------------------------ tabs
+
+function showTab(name) {
+  document.querySelectorAll(".tabs button").forEach(b => b.classList.toggle("on", b.dataset.tab === name));
+  document.querySelectorAll(".tab").forEach(t => t.classList.toggle("on", t.id === `tab-${name}`));
+  if (name === "new") drawPreview(); else { pickLayer.clearLayers(); setPicking(false); }
+}
+document.querySelectorAll(".tabs button").forEach(b => b.addEventListener("click", () => showTab(b.dataset.tab)));
+
+// ------------------------------------------------------------------ server
+
+async function api(url, opts) {
+  const r = await fetch(url, opts);
+  if (!r.ok) {
+    const body = await r.json().catch(() => ({}));
+    const d = body.detail;
+    throw new Error(Array.isArray(d) ? d.map(e => e.msg.replace(/^Value error, /, "")).join(" ") : d || `Request failed (${r.status})`);
+  }
+  return r.status === 204 ? null : r.json();
+}
+
+// ------------------------------------------------------------------ runs
+
+let runs = [];
+let selectedId = null;
+let loadedKey = null;
+let features = [], removedFeatures = [], reviews = {};
+const polyById = new Map();
+
+function runMeta(run) {
+  if (run.status === "done") return `${run.summary.before_date} → ${run.summary.after_date}`;
+  return run.message || "";
+}
+function chip(run) {
+  if (run.status === "done") return `<span class="chip done">${run.summary.num_new_landslides} found</span>`;
+  if (run.status === "failed") return `<span class="chip failed">failed</span>`;
+  return `<span class="chip ${run.status}">${run.status}</span>`;
+}
+
+function renderRuns() {
+  const box = $("runs");
+  if (!runs.length) {
+    box.innerHTML = `<p class="empty">No runs yet. Open <b>New detection</b> to start one.</p>`;
+    return;
+  }
+  box.innerHTML = "";
+  runs.forEach(run => {
+    const el = document.createElement("div");
+    el.className = "run" + (run.id === selectedId ? " on" : "");
+    el.setAttribute("role", "button");
+    el.tabIndex = 0;
+    const canDelete = run.id !== "notebook" && !["queued", "running"].includes(run.status);
+    el.innerHTML = `<div class="nm">${esc(run.name)}</div><div class="meta">${esc(runMeta(run))}</div>
+      <div class="side">${chip(run)}${canDelete ? `<button class="del" title="Delete run" aria-label="Delete run">×</button>` : ""}</div>`;
+    el.addEventListener("click", () => selectRun(run.id));
+    el.addEventListener("keydown", e => { if (e.key === "Enter") selectRun(run.id); });
+    const del = el.querySelector(".del");
+    if (del) del.addEventListener("click", async e => {
+      e.stopPropagation();
+      if (!confirm(`Delete "${run.name}"?`)) return;
+      await api(`/api/runs/${run.id}`, { method: "DELETE" }).catch(err => alert(err.message));
+      if (selectedId === run.id) { selectedId = null; loadedKey = null; clearRunLayers(); }
+      await refreshRuns();
+    });
+    box.appendChild(el);
+  });
+}
+
+async function refreshRuns() {
+  runs = await api("/api/runs");
+  if (!selectedId || !runs.find(r => r.id === selectedId)) selectedId = runs[0]?.id ?? null;
+  renderRuns();
+  await renderDetail();
+}
+
+function selectRun(id) {
+  selectedId = id;
+  renderRuns();
+  renderDetail(true);
+}
+
+function clearRunLayers() {
+  runLayers.clearLayers(); outlineLayer.clearLayers(); removedLayer.clearLayers();
+  if (probLayer) map.removeLayer(probLayer);
+  Object.values(s2Layers).forEach(l => map.removeLayer(l));
+  probLayer = null; s2Layers = {}; features = []; removedFeatures = []; reviews = {};
+}
+
+function settingsText(sm) {
+  const bits = [];
+  if (sm.model_label) bits.push(sm.model_label);
+  if (sm.normalization) bits.push(NORM_LABEL[sm.normalization] || sm.normalization);
+  if (sm.tta) bits.push("flip averaging");
+  if (sm.filters) {
+    const f = sm.filters, on = [];
+    if (f.slope) on.push(`slope ≥ ${f.min_slope_deg}°`);
+    if (f.vegetation) on.push(`NDVI drop ≥ ${f.min_ndvi_drop}`);
+    if (f.water) on.push(`water ≤ ${Math.round(f.max_water_fraction * 100)}%`);
+    bits.push(on.length ? "filters: " + on.join(", ") : "no filters");
+  } else bits.push("no filters");
+  bits.push(`threshold ${sm.threshold}`);
+  let txt = bits.join(" · ");
+  const rb = sm.removed_by || {};
+  if (Object.keys(rb).length) txt += "<br>Removed: " + Object.entries(rb).map(([k, v]) => `${v} ${esc(k)}`).join(", ");
+  return txt;
+}
+
+async function renderDetail(fly = false) {
+  const run = runs.find(r => r.id === selectedId);
+  const status = $("status"), body = $("result-body");
+  if (!run) { status.innerHTML = ""; body.style.display = "none"; clearRunLayers(); return; }
+
+  const key = run.id + ":" + run.status;
+  if (run.status === "queued" || run.status === "running") {
+    status.innerHTML = `<div class="status-box"><div class="spinner"></div><div><b>${run.status === "queued" ? "Queued" : "Running"}</b><br>${esc(run.message || "starting")}…</div></div>`;
+  } else if (run.status === "failed") {
+    status.innerHTML = `<div class="status-box failed"><div><b>This run failed</b><br>${esc(run.message)}</div></div>`;
+  } else status.innerHTML = "";
+  body.style.display = run.status === "done" ? "block" : "none";
+
+  if (key === loadedKey) { if (fly) flyToRun(run); return; }
+  loadedKey = key;
+  clearRunLayers();
+
+  const [lat, lon] = run.summary?.center ?? [run.params.lat, run.params.lon];
+  L.circleMarker([lat, lon], { radius: 9, color: "#35d0e0", weight: 2.5, fill: false })
+    .bindPopup(`<b>${esc(run.name)}</b><br>${lat.toFixed(4)}° N, ${lon.toFixed(4)}° E`).addTo(runLayers);
+  if (run.summary?.bbox) {
+    const [w, s, e, n] = run.summary.bbox;
+    L.rectangle([[s, w], [n, e]], { color: "#fff", weight: 1, dashArray: "4 6", fill: false, interactive: false }).addTo(runLayers);
+  }
+  flyToRun(run);
+  if (run.status !== "done") return;
+
+  const sm = run.summary, v = encodeURIComponent(run.created);
+  $("d-before").textContent = sm.before_date;
+  $("d-after").textContent = sm.after_date;
+  $("s-f1").textContent = sm.model_val_f1 != null ? Number(sm.model_val_f1).toFixed(2) : "–";
+  $("s-removed").textContent = sm.num_removed ?? 0;
+  $("settings").innerHTML = settingsText(sm);
+  $("download").href = `/api/runs/${run.id}/export.geojson`;
+
+  probLayer = L.imageOverlay(`/api/runs/${run.id}/prob.png?v=${v}`, sm.overlay_bounds, { opacity: $("r-opacity").value / 100, interactive: false });
+  if ($("t-prob").checked) probLayer.addTo(map);
+  if (sm.has_imagery) {
+    s2Layers = {
+      before: L.imageOverlay(`/api/runs/${run.id}/before.png?v=${v}`, sm.overlay_bounds, { interactive: false }),
+      after: L.imageOverlay(`/api/runs/${run.id}/after.png?v=${v}`, sm.overlay_bounds, { interactive: false }),
+    };
+  }
+  document.querySelectorAll("#s2img button").forEach(b => b.disabled = b.dataset.k !== "off" && !sm.has_imagery);
+  const current = document.querySelector("#s2img button.on")?.dataset.k ?? "off";
+  if (!sm.has_imagery) setS2("off");
+  showS2(sm.has_imagery ? current : "off");
+
+  const prep = list => list.map((f, i) => ({ ...f, properties: { ...f.properties, fid: f.properties.fid ?? i + 1 } }))
+    .sort((a, b) => b.properties.area_m2 - a.properties.area_m2);
+  const [geo, rem, rv] = await Promise.all([
+    api(`/api/runs/${run.id}/landslides.geojson?v=${v}`).catch(() => ({ features: [] })),
+    sm.num_removed ? api(`/api/runs/${run.id}/removed.geojson?v=${v}`).catch(() => ({ features: [] })) : { features: [] },
+    api(`/api/runs/${run.id}/reviews`).catch(() => ({})),
+  ]);
+  features = prep(geo.features);
+  removedFeatures = prep(rem.features);
+  reviews = rv;
+  $("r-conf").value = Math.round(sm.threshold * 100);
+  renderFeatures();
+  renderRemoved();
+}
+
+function flyToRun(run) {
+  if (run.summary?.bbox) {
+    const [w, s, e, n] = run.summary.bbox;
+    map.fitBounds([[s, w], [n, e]], { padding: [20, 20] });
+  } else if (run.params?.lat != null) map.setView([run.params.lat, run.params.lon], 12);
+}
+
+// ------------------------------------------------------------------ detections + review
+
+const COLORS = { none: "#ff5a36", real: "#4cc38a", false: "#ff8f78" };
+const styleFor = fid => {
+  const c = COLORS[reviews[fid] || "none"];
+  return { color: c, weight: 2, fillColor: c, fillOpacity: reviews[fid] === "false" ? 0.08 : 0.22,
+           dashArray: reviews[fid] === "false" ? "4 4" : null, bubblingMouseEvents: false };
+};
+
+function popupContent(p) {
+  const div = document.createElement("div");
+  const label = reviews[p.fid];
+  const extra = [];
+  if (p.mean_slope != null) extra.push(`Average slope: ${p.mean_slope}°`);
+  if (p.ndvi_change != null) extra.push(`Vegetation change (NDVI): ${p.ndvi_change > 0 ? "+" : ""}${p.ndvi_change}`);
+  div.innerHTML =
+    `<b>Landslide #${p.fid}</b><br>Area: ${fmtArea(p.area_m2)}<br>` +
+    `Model confidence: ${(p.max_prob * 100).toFixed(0)}%<br>` +
+    (extra.length ? `<span class="pop-muted">${extra.join("<br>")}</span><br>` : "") +
+    `<span class="pop-muted">Seen in image from ${esc(p.image_date)}</span>` +
+    `<div class="pop-actions">
+       <button data-l="real" class="${label === "real" ? "on-real" : ""}">Real landslide</button>
+       <button data-l="false" class="${label === "false" ? "on-false" : ""}">False alarm</button>
+     </div>`;
+  div.querySelectorAll("button").forEach(b => b.addEventListener("click", () => setReview(p.fid, reviews[p.fid] === b.dataset.l ? null : b.dataset.l)));
+  return div;
+}
+
+async function setReview(fid, label) {
+  try {
+    reviews = await api(`/api/runs/${selectedId}/reviews/${fid}`, {
+      method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ label }),
+    });
+  } catch (err) { alert(err.message); return; }
+  const layer = polyById.get(fid);
+  if (layer) {
+    layer.setStyle(styleFor(fid));
+    layer.setPopupContent(popupContent(layer.feature_props));
+  }
+  renderReviewSummary();
+  renderList();
+}
+
+function renderReviewSummary() {
+  const vals = features.map(f => reviews[f.properties.fid]).filter(Boolean);
+  const real = vals.filter(x => x === "real").length, fals = vals.filter(x => x === "false").length;
+  const total = features.length;
+  $("rv-counts").textContent = `${vals.length} of ${total} reviewed · ${real} real · ${fals} false`;
+  $("rv-precision").textContent = vals.length ? Math.round(100 * real / vals.length) + "%" : "–";
+  $("rv-bar-r").style.width = total ? (100 * real / total) + "%" : 0;
+  $("rv-bar-f").style.width = total ? (100 * fals / total) + "%" : 0;
+  $("next-unreviewed").disabled = !features.some(f => !reviews[f.properties.fid]);
+}
+
+function shownFeatures() {
+  const minConf = $("r-conf").value / 100;
+  return features.filter(f => (f.properties.max_prob ?? 1) >= minConf);
+}
+
+function renderFeatures() {
+  $("v-conf").textContent = ($("r-conf").value / 100).toFixed(2);
+  const shown = shownFeatures();
+  outlineLayer.clearLayers();
+  polyById.clear();
+  shown.forEach(f => {
+    const p = f.properties;
+    const layer = L.geoJSON(f, { style: () => styleFor(p.fid) });
+    layer.feature_props = p;
+    layer.bindPopup(() => popupContent(p));
+    layer.on("mouseover", () => layer.setStyle({ weight: 3.5 }));
+    layer.on("mouseout", () => layer.setStyle(styleFor(p.fid)));
+    if ($("t-outlines").checked) outlineLayer.addLayer(layer);
+    polyById.set(p.fid, layer);
+  });
+  const total = shown.reduce((s, f) => s + f.properties.area_m2, 0);
+  $("s-count").textContent = shown.length === features.length ? shown.length : `${shown.length}/${features.length}`;
+  $("s-area").textContent = shown.length ? fmtArea(total) : "–";
+  renderReviewSummary();
+  renderList();
+}
+
+function renderList() {
+  const shown = shownFeatures();
+  const list = $("list");
+  list.innerHTML = "";
+  if (!shown.length) {
+    list.innerHTML = `<li class="empty" style="cursor:default">No detections at this confidence level.</li>`;
+    return;
+  }
+  shown.slice(0, 60).forEach(f => {
+    const p = f.properties;
+    const li = document.createElement("li");
+    li.innerHTML = `<span class="n">#${p.fid}</span><span class="a">${fmtArea(p.area_m2)}</span>` +
+      `<span class="p">${(p.max_prob * 100).toFixed(0)}%</span><span class="dot ${reviews[p.fid] || ""}" title="${reviews[p.fid] || "not reviewed"}"></span>`;
+    li.addEventListener("click", () => focusFeature(p.fid, li));
+    list.appendChild(li);
+  });
+}
+
+function focusFeature(fid, li) {
+  document.querySelectorAll("#list li").forEach(x => x.classList.remove("active"));
+  if (li) li.classList.add("active");
+  if (!$("t-outlines").checked) { $("t-outlines").checked = true; renderFeatures(); }
+  const layer = polyById.get(fid);
+  if (!layer) return;
+  map.fitBounds(layer.getBounds(), { maxZoom: 17, padding: [80, 80] });
+  layer.openPopup(layer.getBounds().getCenter());
+}
+
+$("next-unreviewed").addEventListener("click", () => {
+  const next = shownFeatures().find(f => !reviews[f.properties.fid]);
+  if (!next) return;
+  const run = runs.find(r => r.id === selectedId);
+  if (run?.summary?.has_imagery && document.querySelector("#s2img button.on")?.dataset.k === "off") {
+    setS2("after"); showS2("after");
+  }
+  focusFeature(next.properties.fid);
+});
+
+function renderRemoved() {
+  removedLayer.clearLayers();
+  if (!$("t-removed").checked) return;
+  removedFeatures.forEach(f => {
+    const p = f.properties;
+    L.geoJSON(f, { style: { color: "#b7c0c7", weight: 1.5, dashArray: "3 4", fillOpacity: 0.05, bubblingMouseEvents: false } })
+      .bindPopup(`<b>Removed by filters</b><br>Area: ${fmtArea(p.area_m2)}<br>Model confidence: ${(p.max_prob * 100).toFixed(0)}%<br>` +
+                 `<span class="pop-muted">Why: ${esc(p.reason)}</span>`)
+      .addTo(removedLayer);
+  });
+}
+
+$("t-outlines").addEventListener("change", renderFeatures);
+$("t-removed").addEventListener("change", renderRemoved);
+$("r-conf").addEventListener("input", renderFeatures);
+$("t-prob").addEventListener("change", e => {
+  if (!probLayer) return;
+  e.target.checked ? probLayer.addTo(map).bringToFront() : map.removeLayer(probLayer);
+});
+$("r-opacity").addEventListener("input", e => {
+  $("v-opacity").textContent = e.target.value + "%";
+  if (probLayer) probLayer.setOpacity(e.target.value / 100);
+});
+
+// ------------------------------------------------------------------ new detection form
+
+let picking = false;
+function setPicking(on) {
+  picking = on;
+  $("pick").classList.toggle("picking", on);
+  $("pick").textContent = on ? "Click the map…" : "Pick on map";
+  $("map").classList.toggle("picking", on);
+}
+$("pick").addEventListener("click", () => setPicking(!picking));
+
+map.on("click", e => {
+  if (!picking) return;
+  $("f-lat").value = e.latlng.lat.toFixed(4);
+  $("f-lon").value = e.latlng.lng.toFixed(4);
+  $("preset").value = "";
+  setPicking(false);
+  drawPreview();
+});
+
+function drawPreview() {
+  pickLayer.clearLayers();
+  const lat = parseFloat($("f-lat").value), lon = parseFloat($("f-lon").value);
+  if (!isFinite(lat) || !isFinite(lon)) return;
+  const half = parseFloat($("f-size").value);
+  const dlat = half / 111, dlon = half / (111 * Math.cos(lat * Math.PI / 180));
+  L.rectangle([[lat - dlat, lon - dlon], [lat + dlat, lon + dlon]],
+    { color: "#ffc53d", weight: 2, dashArray: "6 6", fillOpacity: 0.06, interactive: false }).addTo(pickLayer);
+  L.circleMarker([lat, lon], { radius: 6, color: "#ffc53d", weight: 2, fillOpacity: 0.9, interactive: false }).addTo(pickLayer);
+}
+["f-lat", "f-lon", "f-size"].forEach(id => $(id).addEventListener("input", drawPreview));
+
+$("preset").addEventListener("change", e => {
+  const p = PRESETS[e.target.value];
+  if (!p) return;
+  $("f-name").value = p.name; $("f-lat").value = p.lat; $("f-lon").value = p.lon; $("f-size").value = p.size;
+  $("f-bs").value = p.bs; $("f-be").value = p.be; $("f-as").value = p.as; $("f-ae").value = p.ae;
+  drawPreview();
+  map.setView([p.lat, p.lon], 12);
+});
+
+Object.entries({ "f-bs": "2023-10-15", "f-be": "2024-02-15", "f-as": "2024-10-15", "f-ae": "2025-02-15" })
+  .forEach(([id, v]) => $(id).value = v);
+
+async function loadOptions() {
+  try {
+    const o = await api("/api/options");
+    const sel = $("f-model");
+    sel.innerHTML = o.models.length
+      ? o.models.map(m => `<option value="${m.name}" ${m.name === o.default_model ? "selected" : ""}>${esc(m.label)}${m.val_f1 != null ? ` (F1 ${Number(m.val_f1).toFixed(2)})` : ""}</option>`).join("")
+      : `<option value="">No trained model found</option>`;
+    [...$("f-norm").options].forEach(opt => opt.disabled = !o.normalizations.includes(opt.value));
+    $("f-norm").value = o.normalizations[0];
+    $("f-slope-v").value = o.filters.min_slope_deg;
+    $("f-veg-v").value = o.filters.min_ndvi_drop;
+    $("f-water-v").value = o.filters.max_water_fraction;
+  } catch { /* the form still works with server defaults */ }
+}
+
+$("form").addEventListener("submit", async e => {
+  e.preventDefault();
+  $("form-error").innerHTML = "";
+  const num = id => parseFloat($(id).value);
+  const body = {
+    name: $("f-name").value,
+    lat: num("f-lat"), lon: num("f-lon"), half_size_km: num("f-size"),
+    before_start: $("f-bs").value, before_end: $("f-be").value,
+    after_start: $("f-as").value, after_end: $("f-ae").value,
+    model: $("f-model").value || null, normalization: $("f-norm").value || null, tta: $("f-tta").checked,
+    filters: {
+      slope: $("f-slope").checked, vegetation: $("f-veg").checked, water: $("f-water").checked,
+      ...(isFinite(num("f-slope-v")) && { min_slope_deg: num("f-slope-v") }),
+      ...(isFinite(num("f-veg-v")) && { min_ndvi_drop: num("f-veg-v") }),
+      ...(isFinite(num("f-water-v")) && { max_water_fraction: num("f-water-v") }),
+    },
+  };
+  if (!isFinite(body.lat) || !isFinite(body.lon)) {
+    $("form-error").innerHTML = `<div class="form-error">Pick a location on the map or type a latitude and longitude.</div>`;
+    return;
+  }
+  $("submit").disabled = true;
+  try {
+    const run = await api("/api/runs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    selectedId = run.id;
+    loadedKey = null;
+    showTab("results");
+    await refreshRuns();
+  } catch (err) {
+    $("form-error").innerHTML = `<div class="form-error">${esc(err.message)}</div>`;
+  } finally {
+    $("submit").disabled = false;
+  }
+});
+
+// ------------------------------------------------------------------ start + live updates
+
+loadOptions();
+refreshRuns().catch(err => {
+  $("runs").innerHTML = `<p class="form-error">Couldn't reach the server: ${esc(err.message)}</p>`;
+});
+setInterval(() => {
+  if (runs.some(r => r.status === "queued" || r.status === "running")) refreshRuns().catch(() => {});
+}, 3000);
+</script>
+</body>
+</html>

@@ -1,0 +1,12 @@
+{
+  "arch": "smp_unet",
+  "encoder": "resnet34",
+  "in_channels": 14,
+  "weights": "landslide_unet_v2.pt",
+  "threshold": 0.85,
+  "val_f1": 0.7422,
+  "val_precision": 0.7385,
+  "val_recall": 0.7458,
+  "val_iou": 0.59,
+  "tta": true
+}

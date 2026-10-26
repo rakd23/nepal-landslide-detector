@@ -1,0 +1,7 @@
+{
+  "threshold": 0.75,
+  "in_channels": 14,
+  "base": 32,
+  "val_f1": 0.739,
+  "val_f1_tta": 0.7406
+}

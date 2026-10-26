@@ -1,0 +1,14 @@
+data/
+*.zip
+*.h5
+*.pt
+*.npy
+*.tif
+*.log
+runs/
+outputs/
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.DS_Store
+Untitled*.ipynb
