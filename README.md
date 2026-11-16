@@ -1,54 +1,17 @@
-# Kernel 🌽 Silage or grain?
+# Nepal Landslide Detector
 
-**Team Kernel · Hack the Harvest 2026 (USDA NASS × NVIDIA, UC Davis)**
+**▶ Live demo: [rakd23-nepal-landslide-detector.hf.space](https://rakd23-nepal-landslide-detector.hf.space)** · [Hugging Face Space](https://huggingface.co/spaces/rakd23/nepal-landslide-detector)
 
-USDA asked for two numbers: how many acres of this year's corn will be harvested **for grain** and how many **for silage**, for every state, **before January**. NASS publishes its first official silage count in January, after the markets have already moved. Kernel produces both numbers by mid-November. It builds them from public data, mostly from what farmers certify to USDA's Farm Service Agency each summer, and checks individual fields from space.
+The demo opens with finished runs for the 2024 Jhyaple Khola storm (v1 and v2 models) and the 2021 Melamchi flood, including the reviewed detections, so you can explore results right away. New detections run on a shared CPU and take a few minutes.
 
-| | |
-|---|---|
-| 🗺️ **Live board** (try it now, no install) | **[rakd23-kernel-board.hf.space](https://rakd23-kernel-board.hf.space)** |
-| 🎞️ **Slides** | **[pitch.com/v/kernel-hack-the-harvest-2026-knd2t7](https://pitch.com/v/kernel-hack-the-harvest-2026-knd2t7)** |
-| 📓 **Submission notebook** | [`jupyter/workspace/Kernel_Submission/kernel_deliverable.ipynb`](jupyter/workspace/Kernel_Submission/kernel_deliverable.ipynb) |
-| 📊 **2026 numbers, every state** | [`test_models/ownModels/silage/out/forecast_2026.csv`](test_models/ownModels/silage/out/forecast_2026.csv) · [`test_models/ownModels/grain/out/forecast_2026.csv`](test_models/ownModels/grain/out/forecast_2026.csv) |
+A GeoAI system that finds **new landslides** in free satellite imagery. You give it a place and two date
+ranges, before and after an event like a monsoon storm or an earthquake. It downloads Sentinel-2 images,
+runs a deep-learning model on every pixel, and outlines the hillsides that collapsed in between, on an
+interactive web map.
 
----
-
-## The answer for 2026
-
-> **6.6% silage · 93.4% grain** of harvested corn acres
-
-| | Silage | Grain |
-|---|---|---|
-| **US acres, 2026** | **6.30M** (80% range 6.02–6.80M) | **88.69M** (80% range 87.10–90.31M) |
-| **Share of harvested corn** | **6.6%** (2025 actual: 6.4%) | **93.4%** (2025 actual: 93.6%) |
-| Model | A-S3 · FSA residual | A-G3 · FSA ratio, 3-year |
-| Uses NASS data from 2026 | No | No |
-
-The answer doesn't depend on which model you pick: Tier A, Tier B and the submitted deliverable (`data/models/deliverable_2026.csv`) all give **6.6% silage**. Our grain total is within **0.2%** of NASS's November figure (88.51M), and we got there without NASS's current-year survey.
-
-| Top silage states | Silage | Grain | Silage share 2026 | 2025 actual |
-|---|---|---|---|---|
-| Wisconsin | 836K | 3.15M | 21.0% | 21.6% |
-| New York | 476K | 556K | 46.1% | 53.2% |
-| South Dakota | 427K | 5.91M | 6.7% | 5.8% |
-| Minnesota | 373K | 8.36M | 4.3% | 4.1% |
-| California | 354K | 56K | 86.2% | 83.1% |
-| Michigan | 336K | 1.96M | 14.6% | 14.7% |
-| Pennsylvania | 326K | 685K | 32.3% | 32.8% |
-
-## Headline results
-
-Every number below comes from a backtest that pretends it is that date in each past year, uses only files published by then (checked file by file against their publication dates), and scores against NASS's final count released the following January. Lower is better.
-
-| | Result | Backtest |
-|---|---|---|
-| 🥇 **Beats NASS in September** | Grain: **1.75%** average state miss vs NASS's own September forecast at **2.53%** | 2017–2024 |
-| 🤝 **Ties NASS in November** | Grain: **1.76%** vs **1.66%**. The difference is +0.10, with a 90% interval of −0.07 to +0.26, so it's a statistical tie | 2017–2024 |
-| 📈 **Silage where NASS has nothing** | A-S3: **12.52%** vs 13.12% for our previous model, better in **7 of 8** years | 2017–2024 |
-| 🛰️ **Field check from space** | Trained only on Quebec fields, it found **10 of 12** silage fields on a Maryland farm it never saw (84% of 44 field-years right) | 2021–2023 |
-| 🔍 **Audited** | Independent audit agents rebuilt every selected model from the raw files and reproduced every reported number | — |
-
-**State miss** = sum of each state's absolute error ÷ actual acres, averaged over the years. **US miss** = error of the national total.
+Built and tested on the **26–28 September 2024 monsoon storm** in central Nepal. That storm triggered
+hundreds of landslides, including the Jhyaple Khola landslide on the Tribhuvan Rajpath highway, which
+killed 35 people.
 
 ---
 
@@ -56,251 +19,188 @@ Every number below comes from a backtest that pretends it is that date in each p
 
 ```mermaid
 flowchart LR
-  FSA["FSA crop acreage<br/>farmer certifications<br/>89 files, 2009–2026"] --> G["A-G3 grain<br/>FSA × 3-yr NASS/FSA ratio"]
-  HIST["NASS finals<br/>past years only"] --> G
-  HIST --> S
-  G --> S["A-S3 silage<br/>(FSA planted − grain) × silage share,<br/>blended with 3-yr reversion"]
-  RMA["RMA insurance · Drought Monitor · NOAA"] -.tested.-> S
-  G --> OUT["2026: grain + silage<br/>by state, 80% ranges"]
-  S --> OUT
-  S2["Sentinel-2 · Landsat · Sentinel-1"] --> F["Field model<br/>cliff vs fade"]
-  F --> STORY["Harvest Story<br/>NVIDIA Nemotron"]
-  OUT --> BOARD["Live board"]
-  F --> BOARD
+    subgraph Training ["Training (once)"]
+        A[Landslide4Sense<br/>3,799 labeled patches<br/>14 layers each] --> B[U-Net<br/>pixel-by-pixel<br/>segmentation]
+        B --> C[(Trained model<br/>.pt weights)]
+    end
+    subgraph Detection ["Detection (every run)"]
+        D[Pick place + dates<br/>on the web map] --> E[Download clearest<br/>before & after images<br/>+ elevation]
+        E --> F[Match imagery to<br/>training data]
+        F --> G[Model scores each<br/>pixel 0 to 1]
+        C --> G
+        G --> H[Keep pixels flagged<br/>AFTER but not BEFORE]
+        H --> I[Remove false alarms:<br/>flat ground, no vegetation<br/>loss, water]
+        I --> J[Outlines on the map<br/>+ human review]
+    end
 ```
 
-**The key idea:** by the mid-July reporting deadline, farmers have already told USDA's Farm Service Agency (FSA) how much corn they planted and what it's for. The FSA files cover about 96–98% of the corn NASS counts. We anchor that to how FSA has compared with NASS's final counts in past years. That's enough to match NASS in November and beat it in September. Grain is the large, stable number. Silage is the small remainder, and that's why silage is the harder of the two.
+1. **Data.** [Landslide4Sense](https://doi.org/10.5281/zenodo.10463239) provides 128 × 128-pixel patches at
+   10 m per pixel, from several regions around the world. Each patch has 14 layers: 12 Sentinel-2 bands
+   (including near-infrared, which shows healthy vegetation), slope, and elevation. Each also has a
+   hand-drawn mask marking the landslide pixels.
+2. **Model.** A U-Net does *semantic segmentation*, meaning it labels every pixel. Its encoder learns
+   *what* is in the image, its decoder works out *where*, and skip connections keep the edges sharp.
+   About 2% of pixels are landslides, so training uses a weighted loss plus a Dice loss to stop the
+   model from predicting "no landslide" everywhere.
+   - **v1:** a U-Net trained from scratch.
+   - **v2:** a U-Net whose encoder is a ResNet34 pretrained on ImageNet (transfer learning), trained
+     with photometric augmentation.
+3. **Detection.** For any location, the pipeline:
+   - picks the clearest before and after images using Sentinel-2's cloud layer
+   - adds Copernicus elevation and slope
+   - rescales the new imagery to match the training data (quantile matching)
+   - slides a 128 × 128 window across the scene, averaging four flipped predictions per window
+     (test-time augmentation)
+   - keeps only landslides that are **new** in the after image
+4. **False-alarm filters.** Each detection is measured and removed if it sits on gentle slopes (average
+   below 10°), shows no vegetation loss (NDVI didn't drop by 0.10), or is mostly water. Removed
+   detections are kept and shown on the map with the reason, so you can check the filters.
+5. **Web app.** A FastAPI backend runs detections as background jobs and stores the results. A Leaflet
+   frontend lets you pick places, watch progress, compare before/after imagery, and **review each
+   detection** as real or a false alarm to measure real-world precision.
 
 ---
 
-## Every model, explained
+## Results
 
-We wrote down every candidate, its inputs and the selection rule **before any score was computed** (the silage rules are hashed into `out/preregistration.sha256`). The rule is mechanical: lowest backtest error, and a more complex model must beat the simplest one by more than **twice the year-to-year noise**.
+**Validation (Landslide4Sense, 570 held-out patches, pixel-level, same patches for every model)**
 
-### Tier A: no current-year NASS data
-Past NASS finals anchor the model. Everything about the current year comes from FSA, RMA crop insurance, the Drought Monitor and NOAA. Code enforces the tiers: every input source carries a tier tag, and `check_tiers()` raises an error if a Tier A candidate reaches for anything above Tier A.
-
-**Grain** · [`test_models/ownModels/grain/`](test_models/ownModels/grain/)
-
-| ID | Model | How it works | 2012–24 state / US | 2017–24 state / US | Result |
+| Model | Threshold | Precision | Recall | F1 | IoU |
 |---|---|---|---|---|---|
-| A-G1 | FSA ratio | Acres certified for grain this year × last year's NASS/FSA grain ratio | 2.15% / 1.15% | 1.97% / 0.93% | not selected |
-| A-G2 | FSA planted share | FSA all-corn planted × last year's NASS grain / FSA planted | 2.24% / 1.19% | 2.06% / 1.01% | not selected |
-| **A-G3** | **FSA ratio, 3-year** | **Like A-G1, with the median ratio of the last three years** | **1.94% / 1.12%** | **1.76% / 1.09%** | ✅ **selected** |
-| A-G4 | FSA ratio + stress | A-G1 corrected by drought and insurance losses | 2.15% / 1.25% | 1.96% / 1.05% | stress adds 0.00 |
-| A-G5 | FSA ratio, same month | Ratio against last year's FSA file from the same point in the season | 2.24% / 1.29% | 1.98% / 0.99% | not selected |
-| — | NASS November forecast | benchmark | 1.61% / 0.58% | 1.66% / 0.82% | |
+| v1 U-Net from scratch | 0.75 | 0.718 | 0.762 | 0.739 | 0.586 |
+| v1 + test-time augmentation | 0.70 | 0.705 | 0.780 | 0.741 | 0.588 |
+| v2 U-Net + ImageNet ResNet34 | 0.85 | 0.723 | 0.753 | 0.738 | 0.584 |
+| v2 + test-time augmentation | 0.85 | 0.739 | 0.746 | **0.742** | **0.590** |
 
-**Silage** · [`test_models/ownModels/silage/`](test_models/ownModels/silage/)
+For reference, the best teams in the 2022 Landslide4Sense competition reached an F1 of roughly 0.7 on
+the landslide class.
 
-| ID | Model | How it works | 2012–24 | 2017–24 | Result |
+**Real-world (Jhyaple Khola, 26–28 Sep 2024 storm; images 22 Oct 2023 → 15 Dec 2024; same area and filters)**
+
+| Model | Detections kept | Removed by filters | Reviewed | Real / false alarm | Precision (95% CI) |
 |---|---|---|---|---|---|
-| A-S1 | Reversion | Last year's acres pulled toward the 3-year average | 14.11% / 4.85% | 13.01% / 3.73% | baseline |
-| A-S2 | FSA pass-through | FSA's silage change where FSA historically captures ≥75% of silage; A-S1 elsewhere | 14.33% / 5.07% | 13.03% / 4.12% | not selected |
-| **A-S3** | **FSA residual** | **FSA planted − our grain estimate, × last year's silage share of non-grain acres, blended with A-S1** | **13.72% / 4.96%** | **12.52% / 4.00%** | ✅ **selected** |
-| A-S4 | Reversion + switch signals | A-S1 adjusted by drought, insurance losses, FSA and insured-silage changes | 14.51% / 5.39% | 14.15% / 4.17% | worse |
-| A-S5 | FSA silage share | Change in FSA's silage share applied to last year | 20.03% / 8.23% | 19.72% / 8.22% | much worse |
-| A-S6 | Pass-through + switch | A-S2 in high-coverage states, A-S4 elsewhere | 14.48% / 5.29% | 13.97% / 4.14% | worse |
+| v1 | 91 | 4 | 30 | 27 / 3 | 90% (74–97%) |
+| v2 | 104 | 10 | 31 | 29 / 2 | **94% (79–98%)** |
 
-### Tier B: NASS-informed
-Tier A plus current-year NASS inputs that aren't the answer: planted acres, the yield forecast, crop condition and progress, and milk cows. It **never** uses NASS's harvested-for-grain forecast.
+Real-world precision is **object-level** (does the outline sit on a real landslide?), not pixel-level
+like the validation scores, so the two tables aren't directly comparable. Reviews were done by the
+author on the largest detections in each run (via the app's *Review next*), so smaller detections may
+differ. Recall wasn't measured because no public inventory for this event was available; `04_evaluate.ipynb`
+computes it if one is supplied.
 
-**Grain** · [`test_models/ownModels/tierB/grain/`](test_models/ownModels/tierB/grain/)
+**What worked**
+- About 9 in 10 flagged areas on real 2024 imagery were confirmed landslides, and nearly all
+  detections with model confidence above 0.9 were real.
+- Before/after change detection removed many of the model's false alarms, such as road cuts and
+  riverbeds that are always bare.
+- **Transfer learning didn't raise validation F1** (0.741 vs 0.742, within noise), likely because
+  ImageNet's colour-photo filters transfer poorly to 14 mostly infrared/terrain layers. On real
+  imagery, though, v2 flagged **14% more landslides at comparable precision** (94% vs 90%; the
+  confidence intervals overlap, so the precision difference isn't significant).
 
-| ID | Model | How it works | 2012–24 | 2017–24 | Result |
-|---|---|---|---|---|---|
-| B-G0 | Planted × last year's share | NASS planted × last year's grain share | 2.24% / 1.04% | 2.15% / 1.12% | baseline |
-| B-G1 | Planted × FSA grain share | × this year's FSA grain share × last year's correction | 2.18% / 1.06% | 2.09% / 1.07% | not selected |
-| B-G2 | Grain-share regression | Ridge on FSA share change, yield shock, drought, condition, losses | 2.18% / 1.09% | 2.11% / 1.18% | no gain |
-| B-G3 | Monotone boosted trees | Same inputs, directions fixed in advance | 2.24% / 0.99% | 2.05% / 0.88% | no gain |
-| B-G4 | Daniel's GBT (reference) | Earlier team model ([`danielModel`](test_models/danielModel/)) | 2.55% / 1.61% | 2.20% / 1.23% | reference |
-| B-G5 | B-G1, 3-year | Median correction of the last three years | 1.92% / 0.91% | 1.75% / 1.03% | not selected |
-| B-G6 | B-G1 + stress | Corrected by stress signals | 2.19% / 1.07% | 2.12% / 1.15% | no gain |
-| **B-G7** | **Blend** | **Geometric mean of B-G5 and A-G3** | **1.89% / 1.01%** | **1.73% / 1.06%** | ✅ **selected** |
-
-**Silage** · [`test_models/ownModels/tierB/silage/`](test_models/ownModels/tierB/silage/)
-
-| ID | Model | How it works | 2012–24 | 2017–24 | Result |
-|---|---|---|---|---|---|
-| B-S0 | Reversion | Same as A-S1 | 14.11% / 4.85% | 13.01% / 3.73% | baseline |
-| B-S1 | + acreage | Adds planted change and FSA non-grain share change | 14.03% / 5.10% | 12.91% / 4.00% | failed rule |
-| B-S2 | + season stress | Adds yield shock, drought, condition, insurance losses | 13.84% / 4.75% | 13.09% / 3.94% | failed rule |
-| B-S3 | + dairy demand | Adds milk-cow change and FSA silage change | 14.11% / 4.92% | 12.89% / 4.00% | failed rule |
-| B-S4 | Monotone boosted trees | On the B-S2 and B-S3 inputs | 14.77% / 5.65% | 14.46% / 4.95% | worse |
-| B-S5 | Residual | NASS planted − Tier B grain, × last year's silage share | 13.80% / 4.96% | 12.69% / 4.01% | not selected |
-| **B-S5b** | **Residual, filled planted** | **B-S5 with FSA-scaled planted where NASS has only March figures** | **13.80% / 4.93%** | **12.65% / 3.94%** | ✅ **selected** |
-
-**What the two tiers show:** NASS's current-year inputs add almost nothing. Tier B's best grain model beats Tier A's by only 0.03 points, and for silage Tier A is the better tier. Trained models (ridge, boosted trees) added nothing over simple ratios.
-
-### Forecast timing
-
-| Model | Sep 15 | Oct 15 | Nov 15 |
-|---|---|---|---|
-| A-G3 grain | **1.75%** / 0.92% | 1.76% / 0.95% | 1.76% / 1.09% |
-| B-G7 grain | 2.08% / 1.08% | 1.72% | 1.73% / 1.06% |
-| NASS forecast that date | 2.53% / 1.05% | 1.66% / 0.82% | 1.66% / 0.82% |
-| A-S3 silage | 12.63% / 4.06% | 12.61% / 4.07% | 12.52% / 4.00% |
-
-Our models stay nearly flat across the fall because FSA certifications are mostly complete by mid-July. NASS improves as its fall surveys come in.
-
-### The report pipeline (`kernelag/`)
-The package behind the deliverable, the reports and the field explorer.
-
-| Module | What it does |
-|---|---|
-| `fsa.py` | Parses FSA crop acreage workbooks, with an as-of rule: only files published by the forecast date |
-| `state_panel.py` | Builds the state × year panel (NASS history, drought, weather, condition, prices, milk cows) |
-| `state_model.py` | The report models: ridge silage feature sets, the delivered `smoothed_chopping` silage level (`silage_level.py`: smoothed state level + drought chopping, parameters fit on earlier years only), and the NASS-anchored grain benchmark |
-| `deliverable.py` | Writes `deliverable_2026.csv`, `deliverable_comparison.csv` (2017–2025 vs NASS finals) and `deliverable_summary.json` |
-| `field_model.py` | Field silage-or-grain classifier (below) |
-| `s2_series.py` · `landsat_series.py` · `s1_series.py` · `multisensor.py` | Sentinel-2, Landsat and Sentinel-1 radar time series via Earth Engine |
-| `state_sample.py` | Draws 300 satellite sample areas of 10×10 km, 20 per state, in the 15 states with the most silage |
-| `explain.py` | Harvest Story: Nemotron writes plain English, and code checks every number |
-| `explorer.py` · `report.py` | Offline HTML pages: `report/index.html` (acreage) and `report/fields.html` (field explorer) |
-
-### Field model: silage is a cliff, grain is a fade
-[`kernelag/field_model.py`](kernelag/field_model.py) · tests in [`test_models/featureTests/`](test_models/featureTests/)
-
-Silage and grain both lose their green around September 10, so harvest timing alone can't tell them apart. The **shape** of the drop can. Silage goes from green to bare in days (NDVI 0.80 → 0.22 in five days), while grain fades over weeks (0.81 → 0.33 over five weeks).
-
-- **Model:** logistic regression on six harvest features that don't depend on the calendar: `max_drop`, `max_drop_rate`, `fade_days`, `green_at_cut`, `ndmi_before_cut`, `ndti_post`.
-- **Train:** Quebec parcels where farmers declared grain or silage maize. **Test:** the organizers' 44 Maryland field-years (USDA Beltsville, 2021–2023), never used for fitting.
-
-| On 44 Maryland field-years | Called silage | Called grain |
-|---|---|---|
-| Truly silage (12) | **10** | 2 |
-| Truly grain (32) | 5 | **27** |
-
-| Approach | Balanced accuracy | Notes |
-|---|---|---|
-| Always "grain" | 0.50 | finds 0 of 12 silage fields |
-| Published September moisture rule | 0.677 | |
-| **Kernel field model, 318 Quebec fields** | **0.839** | 10 of 12 found, 5 of 32 false alarms |
-| Kernel field model, 3,128 Quebec fields | 0.854 | |
-| + Landsat looks | 0.927 | passed the test, audit pending |
-
-The 40–60 score band is sent to review (6 fields); the 38 confident calls are 35 right.
-
-### Harvest Story (NVIDIA Nemotron)
-[`kernelag/explain.py`](kernelag/explain.py)
-
-Statisticians have to defend every number to markets. Python computes every fact about a field: the curve, the evidence weights and the call. **Nemotron 3 Super** (through NVIDIA's API, paid with Brev credits) turns those facts into two or three plain sentences. Code then flags any number in the story that doesn't appear in the facts. [`kernelag/nemotron_check.py`](kernelag/nemotron_check.py) runs Nemotron 3 Nano 4B on a local GPU, so USDA could host the model on its own servers.
-
-```bash
-python -m kernelag.explain --dry-run   # print two prompts, call nothing
-python -m kernelag.explain             # all 44 Maryland field-years (needs NVIDIA_API_KEY in .env)
-```
-
-### Exploratory models (kept for the record)
-
-| Folder | What it tried |
-|---|---|
-| [`danielModel/`](test_models/danielModel/) | Gradient-boosted trees and ridge regression on a shared state panel |
-| [`varunModel/`](test_models/varunModel/) | Which public November signals cut silage error (hay, milk, cattle on feed, planted acres) |
-| [`manrajModel/`](test_models/manrajModel/) | Two silage signals that looked promising and weren't |
-| [`accuracy/`](test_models/accuracy/) | National and state candidates, plus the noise floor that promoted `smoothed_chopping` |
-| [`codexFieldBaseline/`](test_models/codexFieldBaseline/) | Logistic vs XGBoost field models on identical Quebec spatial folds |
-| [`featureTests/`](test_models/featureTests/) | One harness and one decision rule for new field features: dairy distance, heat units, moisture, radar, Landsat |
-| [`testModel/`](test_models/testModel/) | Standard-library acreage baselines from the organizers' Quick Stats file |
+**What didn't, and why**
+- **Domain shift.** The model trained on Landslide4Sense imagery, which was processed differently from
+  the Sentinel-2 L2A images used at detection time, and band B10 is missing from L2A, so validation
+  scores can't simply be assumed to carry over to new imagery. Quantile matching, photometric
+  augmentation, change detection and the false-alarm filters are the mitigations, and the manual
+  review above is how their effect was checked.
+- **Seasonal mismatch.** Comparing an October image with a December one adds shadow and vegetation
+  changes that aren't landslides. Use the same months in both date ranges where possible.
+- **Small and shadowed landslides** under about 10 pixels (1,000 m²), or on steep north-facing slopes,
+  are often missed.
 
 ---
 
-## Set it up
+## Project structure
 
-### 1. Clone and install (Python 3.11+, [`uv`](https://docs.astral.sh/uv/))
-
-```bash
-git clone https://github.com/Severynson/Hack-the-Harvest.git
-cd Hack-the-Harvest
-uv venv .venv
-uv pip install --python .venv/bin/python -r requirements.txt
 ```
-On Windows, use `.venv\Scripts\python.exe` wherever this README says `.venv/bin/python`.
-
-### 2. Rebuild the 2026 forecast
-
-```bash
-.venv/bin/python test_models/ownModels/grain/run.py          # Tier A grain: backtest, selection, 2026
-.venv/bin/python test_models/ownModels/silage/run.py         # Tier A silage
-.venv/bin/python test_models/ownModels/tierB/grain/run.py    # Tier B grain
-.venv/bin/python test_models/ownModels/tierB/silage/run.py   # Tier B silage
-.venv/bin/python -m kernelag.deliverable --lean              # the submitted deliverable files
+geoai/
+├── 01_explore_landslide4sense.ipynb   Step 3: look at the data, save band statistics
+├── 02_train_unet.ipynb                Step 4: train v1 (U-Net from scratch)
+├── 02b_train_v2.ipynb                 Step 4b: train v2 (pretrained ResNet34), compare v1 vs v2
+├── 03_detect_nepal.ipynb              Step 5: run detection on one area, step by step
+├── 04_evaluate.ipynb                  Step 7: real-world accuracy from reviews / an inventory
+├── webapp/
+│   ├── app.py                         FastAPI backend: jobs, reviews, export
+│   ├── pipeline.py                    the detection pipeline used by the app
+│   └── static/index.html              Leaflet map frontend
+├── deploy/                            Docker + Hugging Face Spaces deployment
+├── data/TrainData/                    Landslide4Sense (download separately)
+├── landslide_unet.pt, model_config.json         v1 model
+├── landslide_unet_v2.pt, model_config_v2.json   v2 model
+├── band_stats.npy, band_quantiles.npy           normalization statistics
+└── runs/                              web app results (one folder per run)
 ```
-Each `run.py` writes its backtest, its selection and `forecast_2026.csv` into its own `out/` folder. `--score-2025` scores the held-out year **once** and refuses to overwrite it.
-
-### 3. Run the board locally
-The board lives on the `board` branch. It reads the files the models already wrote, so nothing reruns, and it needs no GPU and no API key.
-
-```bash
-git fetch origin board
-git checkout origin/board -- board
-uv pip install --python .venv/bin/python fastapi uvicorn
-.venv/bin/python board/app.py          # → http://localhost:7870
-```
-The board has eight views:
-- **Map:** drag and zoom the US map, then switch layers for each model's forecast, county dairy and silage, weather, frost, harvest pace, crop value, milk price, highways, export routes and live satellite passes.
-- **Tier A/B:** the planned candidates and the bars they have to clear.
-- **Leaderboard:** every model ranked by backtest error.
-- **Compare:** year-by-year errors for the models you tick.
-- **2026 forecast:** every model's US total and states side by side.
-- **Field models:** satellite field classifiers and their scores.
-- **Add a model:** the recipe for publishing a new one.
-
-The hosted copy at [rakd23-kernel-board.hf.space](https://rakd23-kernel-board.hf.space) pulls this repo every 5 minutes, so new results show up on their own.
-
-**Add your model to the board** with one call:
-```python
-from board.publish import publish
-publish("test_models/myModel/out",
-        predictions=preds,   # columns: model, target (silage|grain), year, state, actual, predicted
-        forecast=fc_2026)    # columns: model, target, state, predicted[, lo80, hi80]
-```
-
-### 4. Offline reports and tests
-
-```bash
-.venv/bin/python -m kernelag.evaluate
-.venv/bin/python -m kernelag.report      # report/index.html: US and state acreage
-.venv/bin/python -m kernelag.explorer    # report/fields.html: field explorer
-.venv/bin/python -m pytest -q
-```
-Both HTML pages open straight from disk, with no server and no network.
-
-The live satellite pullers (`s2_series`, `landsat_series`, `s1_series`, `state_sample`) need `earthengine-api` and Earth Engine access. The cached demo doesn't.
 
 ---
 
-## Data
+## Running it
 
-| Source | What we use | Tier A | Tier B |
-|---|---|---|---|
-| NASS final figures, past years | Grain and silage acres by state (training targets and anchors) | ✅ | ✅ |
-| FSA crop acreage reports | Corn planted by county and intended use; monthly Aug–Jan; 89 workbooks 2009–2026 | ✅ | ✅ |
-| RMA crop insurance | Insured corn acres by type; weather-loss claims | ✅ | ✅ |
-| US Drought Monitor, NOAA | Severe drought share; season rain, heat, first frost | ✅ | ✅ |
-| NASS current year | Planted acres, yield forecast, condition, progress, milk cows | ❌ | ✅ |
-| NASS harvested-for-grain forecast | The number we're replacing | ❌ | ❌ |
-| Sentinel-2, Landsat, Sentinel-1 | Field greenness, moisture and residue curves | field model | field model |
-| Quebec parcel declarations · USDA Beltsville labels | Field training labels · held-out field test | field model | field model |
+**Environment (macOS, Apple Silicon):**
+```bash
+conda create -n geoai python=3.11 -y && conda activate geoai
+conda install -c conda-forge pytorch torchvision h5py numpy matplotlib jupyterlab \
+    pystac-client planetary-computer odc-stac rasterio geopandas fastapi uvicorn \
+    timm huggingface_hub safetensors -y
+pip install --no-deps segmentation-models-pytorch
+```
+Install PyTorch from conda-forge, not pip. Mixing the two causes an OpenMP crash on macOS.
 
-File-level provenance is in [`data/DATA_MANIFEST.tsv`](data/DATA_MANIFEST.tsv). Verified figures are in [`DOCS/VERIFIED_METRICS.md`](DOCS/VERIFIED_METRICS.md), and decisions in [`DOCS/DECISIONS.md`](DOCS/DECISIONS.md).
+**Data:** download `TrainData.zip` from [Zenodo](https://zenodo.org/records/10463239) and unzip it into
+`~/geoai/data/`.
+
+**Notebooks:** run them in order in JupyterLab (`cd ~/geoai && jupyter lab`).
+
+**Web app:**
+```bash
+cd ~/geoai/webapp
+uvicorn app:app
+```
+Then open http://127.0.0.1:8000. Under **New detection**, choose an example event or click
+**Pick on map**, set the dates, and click **Run detection**. A run takes a few minutes. Afterwards,
+use **Review next** to mark detections and **Download GeoJSON** to export them.
+
+**Deploy online (Hugging Face Spaces):** see [Deploying](#deploying).
 
 ---
 
-## Honest limits
+## Deploying
 
-- **NASS's November forecast is still better** over 2012–2024 (largely because of the 2012 drought year and 2014) and on the US total. We claim a tie for 2017–2024 and a win in September, not a November win.
-- **Silage is noisy.** Silage is about 6–9% of corn, so a small grain error becomes a large error in the remainder. Even a model that knew this year's true non-grain acres would miss by 8.4% (2012–2024). A-S3's gain is in how acres are split between states, not in the US total (4.00% vs 3.90%).
-- **"No current-year NASS data" isn't "data NASS doesn't use."** NASS draws on FSA records too.
-- **The field test is small:** 44 field-years on one farm, with labels from a different country. The field score is uncalibrated, not a probability.
-- **Satellite at state level is still running** (300 sample areas, rules fixed in advance). We claim no result yet.
-- **The audit found one issue:** three FSA files had been assumed public a few days too early. November results are unaffected, and the September advantage holds for 2017–2024.
-- **2025 was scored once,** after the methods were fixed. One year is information, not proof.
+The `deploy/` folder packages the web app as a Docker container for
+[Hugging Face Spaces](https://huggingface.co/spaces). It's free and runs on CPU.
+
+1. Create a Hugging Face account and a new Space with the **Docker** SDK (blank template).
+2. Install Git LFS once: `brew install git-lfs`.
+3. Clone your Space and copy everything into it:
+   ```bash
+   git clone https://huggingface.co/spaces/<your-username>/<space-name> ~/landslide-space
+   bash ~/geoai/deploy/prepare_space.sh ~/landslide-space
+   cd ~/landslide-space && git commit -m "Deploy landslide detector" && git push
+   ```
+   When `git push` asks for a password, use a Hugging Face **access token** with write permission
+   (Settings → Access Tokens).
+4. The Space builds for several minutes, then serves the app at
+   `https://huggingface.co/spaces/<your-username>/<space-name>`.
+
+The free hardware has no GPU, so runs are slower. New results are lost whenever the Space restarts. To keep
+demo runs, copy finished folders from `~/geoai/runs/` into the Space's `model/runs/`, remove `model/runs/`
+from its `.gitignore`, run `git lfs track "*.tif" "*.png"`, and commit them; the app loads them on startup.
+`MAX_QUEUE` (default 3 on Spaces) limits how many runs can wait in line.
 
 ---
 
-## Team
+## Data and credits
 
-Team Kernel built this with a crew of coding agents working under one protocol. Agents must read [`CLAUDE.md`](CLAUDE.md) and follow its Git coordination rules before editing. [`CHANGELOG.md`](CHANGELOG.md) records every delivery. MIT licensed, see [`LICENSE`](LICENSE).
+- **Landslide4Sense:** Ghorbanzadeh, O., Xu, Y., Ghamisi, P., Kopp, M., & Kreil, D. (2022).
+  *Landslide4Sense: Reference Benchmark Data and Deep Learning Models for Landslide Detection.*
+  IEEE Transactions on Geoscience and Remote Sensing, 60, 1–17. Data: CC BY 4.0,
+  https://doi.org/10.5281/zenodo.10463239
+- **Sentinel-2 L2A imagery** (Copernicus) and **Copernicus DEM GLO-30**, accessed through
+  [Microsoft Planetary Computer](https://planetarycomputer.microsoft.com/)
+- **segmentation_models_pytorch** for the v2 architecture; **Leaflet**, **Esri World Imagery** and
+  **OpenStreetMap** for the map
 
-Built on **NVIDIA** (Nemotron, Brev) and **Keeboh** (team workspace and B200 GPU) for Hack the Harvest 2026.
+## Future work
+- Fine-tune on a few hundred hand-labeled Nepal patches to close the domain-shift gap.
+- Use Sentinel-1 radar, which sees through clouds, so detection can run during the monsoon itself.
+- Tile larger areas (whole districts) and schedule automatic runs after heavy-rain alerts.

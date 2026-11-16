@@ -12,6 +12,9 @@ then open http://127.0.0.1:8000 in your browser.
 Environment variables (optional, used when deploying online):
     GEOAI_ROOT   folder with the model files and runs (default ~/geoai)
     MAX_QUEUE    how many runs may wait in line at once (default 5)
+    DEMO_MODE    set to 1 on a public deployment: runs that exist when the server starts become
+                 read-only "example" runs (visitors can't delete them or change their reviews),
+                 and the developer-only notebook run is hidden
 """
 import json
 import os
@@ -38,6 +41,7 @@ RUNS_DIR.mkdir(parents=True, exist_ok=True)
 STATIC_DIR = Path(__file__).parent / "static"
 RUN_FILES = {"landslides.geojson", "removed.geojson", "prob.png", "before.png", "after.png"}
 MAX_QUEUE = int(os.environ.get("MAX_QUEUE", "5"))
+DEMO_MODE = os.environ.get("DEMO_MODE", "") == "1"
 
 app = FastAPI(title="Nepal Landslide Detector", version="3.0")
 
@@ -72,11 +76,34 @@ def update_run(run_id, **changes):
         save_run(run)
 
 
+RESTART_MESSAGE = ("The server restarted while this run was in progress (the free server goes to sleep "
+                   "when nobody is using it), so the run stopped. Start it again from New detection.")
+
+
+def friendly_error(e):
+    """Turn a pipeline exception into a message a visitor can act on."""
+    text = str(e) or e.__class__.__name__
+    if isinstance(e, ValueError):          # the pipeline's own checks (clouds, no imagery) already explain themselves
+        return text
+    low = (text + " " + e.__class__.__name__).lower()
+    if isinstance(e, MemoryError) or "out of memory" in low or "cannot allocate" in low:
+        return ("This area was too large for the free server's memory. Choose a smaller area size "
+                "(5 × 5 km) and run it again.")
+    network = ("timeout", "timed out", "connection", "http", "curl", "ssl", "403", "404", "409", "429",
+               "500", "502", "503", "504", "rasterioioerror", "apierror", "temporary failure")
+    if any(k in low for k in network):
+        return ("Couldn't download the satellite images: Microsoft Planetary Computer, which supplies them, "
+                "didn't respond properly. This is usually temporary, so wait a minute and run it again. "
+                f"(Details: {text[:200]})")
+    return ("Something went wrong while processing the images. Try a different date range or a smaller area. "
+            f"(Details: {e.__class__.__name__}: {text[:200]})")
+
+
 def load_runs():
     for path in sorted(RUNS_DIR.glob("*/run.json")):
         run = json.loads(path.read_text())
         if run["status"] in ("queued", "running"):
-            run.update(status="failed", message="Stopped because the server restarted. Run it again.")
+            run.update(status="failed", message=RESTART_MESSAGE)
             save_run(run)
         runs[run["id"]] = run
 
@@ -110,6 +137,29 @@ def import_notebook_run():
 load_runs()
 import_notebook_run()
 
+# On a public demo, the runs shipped with the app are examples: visible to everyone, never editable.
+EXAMPLE_IDS = {rid for rid, r in runs.items() if r["status"] == "done"} if DEMO_MODE else set()
+HIDDEN_IDS = {"notebook"} if DEMO_MODE else set()
+
+
+def featured_run_id():
+    """The example a first-time visitor should see: the default model's run with the most reviews."""
+    if not EXAMPLE_IDS:
+        return None
+    best_model = pipeline.default_model()
+    def score(rid):
+        r = runs[rid]
+        n_reviews = len(json.loads((RUNS_DIR / rid / "reviews.json").read_text())) if (RUNS_DIR / rid / "reviews.json").exists() else 0
+        return ((r.get("params") or {}).get("model") == best_model, n_reviews, r.get("created", ""))
+    candidates = [rid for rid in EXAMPLE_IDS if rid not in HIDDEN_IDS]
+    return max(candidates, key=score) if candidates else None
+
+
+def check_editable(run_id):
+    if run_id in EXAMPLE_IDS:
+        raise HTTPException(403, "This is an example run, so it can't be changed. "
+                                 "Start your own run from New detection to review or delete detections.")
+
 
 def execute(run_id):
     p = runs[run_id]["params"]
@@ -127,7 +177,7 @@ def execute(run_id):
         update_run(run_id, status="done", message="", summary=summary)
     except Exception as e:  # noqa: BLE001
         traceback.print_exc()
-        update_run(run_id, status="failed", message=str(e) or e.__class__.__name__)
+        update_run(run_id, status="failed", message=friendly_error(e))
 
 
 # ---------------------------------------------------------------- API models
@@ -176,7 +226,9 @@ class Review(BaseModel):
 
 
 def public(run):
-    return {k: v for k, v in run.items() if k not in ("source_mtime", "version")}
+    out = {k: v for k, v in run.items() if k not in ("source_mtime", "version")}
+    out["example"] = run["id"] in EXAMPLE_IDS
+    return out
 
 
 def get_existing(run_id):
@@ -196,6 +248,9 @@ def options():
         "default_model": pipeline.default_model(),
         "normalizations": pipeline.normalization_modes(),
         "filters": pipeline.DEFAULT_FILTERS,
+        "demo": DEMO_MODE,
+        "featured_run": featured_run_id(),
+        "max_queue": MAX_QUEUE,
     }
 
 
@@ -203,14 +258,17 @@ def options():
 def list_runs():
     import_notebook_run()
     with runs_lock:
-        return sorted((public(r) for r in runs.values()), key=lambda r: r["created"], reverse=True)
+        visible = (public(r) for rid, r in runs.items() if rid not in HIDDEN_IDS)
+        # visitors' own runs first (newest first), then the examples
+        return sorted(visible, key=lambda r: (not r["example"], r["created"]), reverse=True)
 
 
 @app.post("/api/runs", status_code=201)
 def create_run(req: RunRequest):
     waiting = sum(r["status"] in ("queued", "running") for r in runs.values())
     if waiting >= MAX_QUEUE:
-        raise HTTPException(429, f"{waiting} runs are already waiting. Try again when one finishes.")
+        raise HTTPException(429, f"{waiting} runs are already waiting in line (the free server runs one at a time). "
+                                 "Try again in a few minutes, or explore the example runs meanwhile.")
     if req.model and req.model not in [m["name"] for m in pipeline.available_models()]:
         raise HTTPException(422, f"Model {req.model} isn't trained yet.")
     run_id = datetime.now().strftime("%Y%m%d-%H%M%S-") + secrets.token_hex(2)
@@ -246,6 +304,7 @@ def get_reviews(run_id: str):
 @app.put("/api/runs/{run_id}/reviews/{fid}")
 def set_review(run_id: str, fid: int, review: Review):
     get_existing(run_id)
+    check_editable(run_id)
     with runs_lock:
         reviews = read_reviews(run_id)
         if review.label is None:
@@ -287,6 +346,7 @@ def run_file(run_id: str, filename: str):
 @app.delete("/api/runs/{run_id}", status_code=204)
 def delete_run(run_id: str):
     run = get_existing(run_id)
+    check_editable(run_id)
     if run["status"] in ("queued", "running"):
         raise HTTPException(409, "Wait for this run to finish before deleting it.")
     if run_id == "notebook":

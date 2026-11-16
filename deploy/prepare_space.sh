@@ -25,14 +25,23 @@ for f in landslide_unet.pt model_config.json band_stats.npy band_quantiles.npy l
   if [ -f "$GEOAI/$f" ]; then cp "$GEOAI/$f" "$SPACE/model/"; echo "  $f"; fi
 done
 
+# Finished runs in ~/geoai/runs become read-only example runs on the Space (DEMO_MODE=1 in the Dockerfile).
+echo "Copying finished runs as examples..."
+mkdir -p "$SPACE/model/runs"
+for run in "$GEOAI"/runs/*/; do
+  [ -f "$run/run.json" ] || continue
+  if grep -q '"status": "done"' "$run/run.json"; then
+    cp -R "$run" "$SPACE/model/runs/"; echo "  $(basename "$run")"
+  fi
+done
+
 cat > "$SPACE/.gitignore" <<'EOF'
-model/runs/
 __pycache__/
 EOF
 
 cd "$SPACE"
 git lfs install --local >/dev/null
-git lfs track "*.pt" "*.npy" >/dev/null
+git lfs track "*.pt" "*.npy" "*.tif" "*.png" >/dev/null
 git add .gitattributes .gitignore README.md Dockerfile requirements.txt app.py pipeline.py static model
 
 echo

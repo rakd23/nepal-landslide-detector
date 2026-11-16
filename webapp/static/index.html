@@ -81,6 +81,7 @@
     background: var(--panel-2); border-radius: var(--radius); padding: 11px 12px; margin-top: 14px;
   }
   .status-box.failed { background: var(--accent-soft); color: #ffb3a3; }
+  .status-box > div { min-width: 0; overflow-wrap: anywhere; }
   .spinner {
     width: 15px; height: 15px; flex-shrink: 0; margin-top: 1px; border-radius: 50%;
     border: 2px solid var(--line); border-top-color: var(--pick); animation: spin 0.9s linear infinite;
@@ -195,7 +196,40 @@
   .pop-actions button.on-false { background: var(--bad); border-color: var(--bad); color: #1a0904; }
   .pop-muted { color: var(--muted); font-size: 12px; }
 
+  /* plain-language intro, guide, welcome card */
+  .sub b { color: var(--text); font-weight: 600; }
+  .guide h2 { margin-top: 20px; }
+  .guide p, .guide li, .guide dd { font-size: 13px; line-height: 1.55; color: #c9d1d6; }
+  .guide p { margin: 0 0 10px; }
+  .guide ol { margin: 0 0 6px; padding-left: 20px; }
+  .guide li { margin-bottom: 7px; }
+  .guide li b, .guide p b, .guide dd b { color: var(--text); }
+  .guide dl { margin: 0; }
+  .guide dt { font-size: 12.5px; font-weight: 600; color: #ffb3a3; margin-top: 10px; }
+  .guide dd { margin: 3px 0 0; }
+  .guide a, .linkish { color: var(--site); }
+  .linkish { background: none; border: 0; padding: 0; cursor: pointer; font-size: inherit; text-decoration: underline; }
+  .key { display: flex; flex-direction: column; gap: 5px; margin: 8px 0 4px; font-size: 12.5px; color: #c9d1d6; }
+  .key span { display: flex; align-items: center; gap: 8px; }
+  .chip.example { color: var(--site); }
+  .start-hint { font-size: 12.5px; line-height: 1.5; color: #c9d1d6; background: var(--panel-2); border-radius: var(--radius); padding: 10px 12px; margin: 14px 0 4px; }
+
+  #welcome {
+    position: fixed; left: 394px; top: 18px; z-index: 1000; width: min(430px, calc(100vw - 420px));
+    background: rgba(22, 26, 29, 0.97); border: 1px solid var(--line); border-radius: 14px;
+    padding: 18px 18px 16px; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+  }
+  #welcome[hidden] { display: none; }
+  #welcome h3 { margin: 0 0 8px; font-size: 17px; }
+  #welcome p { margin: 0 0 10px; font-size: 13.5px; line-height: 1.55; color: #c9d1d6; }
+  #welcome .actions { display: flex; gap: 8px; margin-top: 12px; }
+  #welcome .actions .btn { flex: 1; text-align: center; }
+  #welcome .actions .btn.primary { margin-top: 0; padding: 8px 12px; }
+  #welcome .x { position: absolute; top: 10px; right: 10px; }
+  #welcome small { display: block; margin-top: 10px; color: var(--muted); font-size: 12px; line-height: 1.45; }
+
   @media (max-width: 760px) {
+    #welcome { left: 10px; right: 10px; top: 10px; width: auto; max-height: 46vh; overflow-y: auto; }
     body { flex-direction: column-reverse; }
     #panel { width: 100%; height: 50vh; border-right: 0; border-top: 1px solid var(--line); padding: 14px 16px 24px; }
     #map { height: 50vh; flex: none; }
@@ -206,11 +240,14 @@
 
 <aside id="panel">
   <h1>Nepal Landslide Detector</h1>
-  <p class="sub">A U-Net trained on Landslide4Sense finds landslides that appear between two Sentinel-2 images.</p>
+  <p class="sub">Finds <b>new landslides</b> by comparing free satellite images from before and after a storm or
+    earthquake. It outlines hillsides that collapsed, so responders can see where roads and villages may be
+    cut off without waiting for reports from the ground.</p>
 
   <nav class="tabs">
     <button data-tab="results" class="on">Results</button>
     <button data-tab="new">New detection</button>
+    <button data-tab="guide">Guide</button>
   </nav>
 
   <!-- RESULTS -->
@@ -240,8 +277,13 @@
             <div class="small" id="rv-counts">0 reviewed</div>
           </div>
           <div class="bar"><div class="r" id="rv-bar-r" style="width:0"></div><div class="f" id="rv-bar-f" style="width:0"></div></div>
-          <div class="small" style="color:var(--muted);font-size:12px;line-height:1.45">
+          <div class="small" id="rv-help" style="color:var(--muted);font-size:12px;line-height:1.45">
             Open a detection, compare the before and after images, and mark it as a real landslide or a false alarm.
+          </div>
+          <div class="key">
+            <span><span class="swatch" style="background:#ff5a36"></span> Found by the model, not checked yet</span>
+            <span><span class="swatch" style="background:#4cc38a"></span> Checked: real landslide</span>
+            <span><span class="swatch" style="border:1.5px dashed #ff8f78"></span> Checked: false alarm</span>
           </div>
           <div class="review-actions">
             <button class="btn" id="next-unreviewed" type="button">Review next</button>
@@ -287,6 +329,10 @@
   <!-- NEW DETECTION -->
   <section class="tab" id="tab-new">
     <form id="form" autocomplete="off">
+      <div class="start-hint">
+        <b>New here?</b> Choose an example event below and click <b>Run detection</b> at the bottom.
+        A run takes about 3–8 minutes on the free server. See the <button type="button" class="linkish" data-goto="guide">Guide</button> for tips.
+      </div>
       <h2>Start from an example</h2>
       <label class="field">
         <select id="preset">
@@ -360,7 +406,86 @@
       <div id="form-error"></div>
     </form>
   </section>
+
+  <!-- GUIDE -->
+  <section class="tab guide" id="tab-guide">
+    <h2>What it's for</h2>
+    <p>After heavy rain or an earthquake in the mountains, landslides block roads, bury homes and dam rivers.
+      In remote areas nobody may know where they are for days. Sentinel-2 satellites photograph Nepal every
+      few days for free. This tool compares a <b>before</b> and an <b>after</b> image and marks ground that
+      changed from vegetation to fresh bare soil on a slope, which is what a new landslide looks like from space.</p>
+    <p>It could help disaster-response teams decide where to send help, road departments check highways,
+      and researchers map landslides after an event.</p>
+
+    <h2>Look at an example (1 minute)</h2>
+    <ol>
+      <li>In <b>Results</b>, pick a run under <b>Runs</b>. Runs marked <b>example</b> are already finished.
+        The Jhyaple Khola runs cover the September 2024 storm near Kathmandu.</li>
+      <li>Zoom into an <b>orange outline</b> and click it to see its size, how confident the model is,
+        the slope and how much vegetation was lost.</li>
+      <li>Under <b>Layers</b>, switch the Sentinel-2 image between <b>Before</b> and <b>After</b> to see the
+        hillside change for yourself.</li>
+      <li><b>Green</b> outlines were checked by hand and are real landslides; <b>red dashed</b> ones were false
+        alarms. "Precision from your reviews" is the share of checked detections that were real.</li>
+    </ol>
+
+    <h2>Run your own (about 5 minutes)</h2>
+    <ol>
+      <li>Open <b>New detection</b>. Choose an example event, or click <b>Pick on map</b> and click a
+        mountain area.</li>
+      <li>Set the <b>Before</b> dates (before the event) and the <b>After</b> dates (after it). Use the
+        dry season, about <b>October to February</b>, in both: the monsoon is cloudy and the satellite can't
+        see through clouds.</li>
+      <li>Keep the area at <b>5 × 5 km</b> or <b>10 × 10 km</b>, then click <b>Run detection</b>.</li>
+      <li>The run waits in line and shows its progress. When it finishes, the outlines appear on the map.
+        Mark each one as real or a false alarm, and use <b>Download GeoJSON</b> to open them in QGIS or Google Earth.</li>
+    </ol>
+
+    <h2 id="guide-errors">If a run fails</h2>
+    <dl>
+      <dt>"No Sentinel-2 images under 20% cloud…"</dt>
+      <dd>No clear image exists in that date range. Make the range longer or move it to October–February.</dd>
+      <dt>"The clearest image … is still X% cloud"</dt>
+      <dd>Every image in the range is cloudy over this spot. Try different months.</dd>
+      <dt>"Couldn't download the satellite images"</dt>
+      <dd>The image provider (Microsoft Planetary Computer) didn't respond. Wait a minute and run it again.</dd>
+      <dt>"The server restarted…"</dt>
+      <dd>The free server sleeps when nobody uses it and loses runs in progress. Start the run again.</dd>
+      <dt>"…runs are already waiting in line"</dt>
+      <dd>The server does one run at a time. Wait a few minutes and look at the examples meanwhile.</dd>
+      <dt>"…too large for the free server's memory"</dt>
+      <dd>Choose the 5 × 5 km area size.</dd>
+    </dl>
+
+    <h2>How it works</h2>
+    <p>A <b>U-Net</b>, a deep-learning model that labels every pixel, was trained on Landslide4Sense:
+      3,799 hand-labeled image patches from around the world (validation F1 0.74). For a new place it scores
+      each 10 m pixel in both images and keeps only landslides that are new in the after image. Filters then
+      remove flat ground, spots where vegetation didn't drop, and rivers. On the 2024 storm, 29 of 31
+      hand-checked detections from the v2 model were real landslides.</p>
+
+    <h2>Limits</h2>
+    <p>It misses landslides smaller than about 1,000 m² and ones in deep shadow, it can't see through clouds,
+      and its detections are unconfirmed until someone checks them.</p>
+    <p>Code and full results:
+      <a href="https://github.com/rakd23/nepal-landslide-detector" target="_blank" rel="noopener">github.com/rakd23/nepal-landslide-detector</a></p>
+  </section>
 </aside>
+
+<div id="welcome" hidden role="dialog" aria-labelledby="welcome-title">
+  <button class="del x" id="welcome-close" title="Close" aria-label="Close">×</button>
+  <h3 id="welcome-title">Find landslides from space</h3>
+  <p>In September 2024, a monsoon storm set off hundreds of landslides around Kathmandu. One at
+    Jhyaple Khola buried a highway and killed 35 people.</p>
+  <p>This tool finds landslide scars like these automatically, by comparing free satellite images from
+    before and after an event. Orange outlines are what the model found; green ones were checked by hand
+    and confirmed real.</p>
+  <div class="actions">
+    <button class="btn primary" id="welcome-example" type="button">Explore the 2024 example</button>
+    <button class="btn" id="welcome-guide" type="button">How to use it</button>
+  </div>
+  <small>You can also run it on any mountain area and dates from <b>New detection</b> (about 5 minutes).</small>
+</div>
 
 <div id="map"></div>
 
@@ -427,6 +552,14 @@ function showTab(name) {
   if (name === "new") drawPreview(); else { pickLayer.clearLayers(); setPicking(false); }
 }
 document.querySelectorAll(".tabs button").forEach(b => b.addEventListener("click", () => showTab(b.dataset.tab)));
+document.addEventListener("click", e => {
+  const link = e.target.closest("[data-goto]");
+  if (!link) return;
+  e.preventDefault();
+  showTab(link.dataset.goto);
+  if (link.dataset.anchor) $(link.dataset.anchor)?.scrollIntoView({ behavior: "smooth" });
+  else $("panel").scrollTop = 0;
+});
 
 // ------------------------------------------------------------------ server
 
@@ -449,11 +582,14 @@ let features = [], removedFeatures = [], reviews = {};
 const polyById = new Map();
 
 function runMeta(run) {
-  if (run.status === "done") return `${run.summary.before_date} → ${run.summary.after_date}`;
+  const model = run.params?.model ? run.params.model + " · " : "";
+  if (run.status === "done") return `${model}${run.summary.before_date} → ${run.summary.after_date}`;
+  if (run.status === "failed") return "Open it to see why";
   return run.message || "";
 }
 function chip(run) {
-  if (run.status === "done") return `<span class="chip done">${run.summary.num_new_landslides} found</span>`;
+  if (run.status === "done") return (run.example ? `<span class="chip example">example</span>` : "") +
+    `<span class="chip done">${run.summary.num_new_landslides} found</span>`;
   if (run.status === "failed") return `<span class="chip failed">failed</span>`;
   return `<span class="chip ${run.status}">${run.status}</span>`;
 }
@@ -470,7 +606,7 @@ function renderRuns() {
     el.className = "run" + (run.id === selectedId ? " on" : "");
     el.setAttribute("role", "button");
     el.tabIndex = 0;
-    const canDelete = run.id !== "notebook" && !["queued", "running"].includes(run.status);
+    const canDelete = run.id !== "notebook" && !run.example && !["queued", "running"].includes(run.status);
     el.innerHTML = `<div class="nm">${esc(run.name)}</div><div class="meta">${esc(runMeta(run))}</div>
       <div class="side">${chip(run)}${canDelete ? `<button class="del" title="Delete run" aria-label="Delete run">×</button>` : ""}</div>`;
     el.addEventListener("click", () => selectRun(run.id));
@@ -489,7 +625,10 @@ function renderRuns() {
 
 async function refreshRuns() {
   runs = await api("/api/runs");
-  if (!selectedId || !runs.find(r => r.id === selectedId)) selectedId = runs[0]?.id ?? null;
+  if (!selectedId || !runs.find(r => r.id === selectedId)) {
+    const featured = runs.find(r => r.id === OPTIONS.featured_run);
+    selectedId = (featured ?? runs[0])?.id ?? null;
+  }
   renderRuns();
   await renderDetail();
 }
@@ -535,7 +674,8 @@ async function renderDetail(fly = false) {
   if (run.status === "queued" || run.status === "running") {
     status.innerHTML = `<div class="status-box"><div class="spinner"></div><div><b>${run.status === "queued" ? "Queued" : "Running"}</b><br>${esc(run.message || "starting")}…</div></div>`;
   } else if (run.status === "failed") {
-    status.innerHTML = `<div class="status-box failed"><div><b>This run failed</b><br>${esc(run.message)}</div></div>`;
+    status.innerHTML = `<div class="status-box failed"><div><b>This run failed</b><br>${esc(run.message)}` +
+      `<br><button type="button" class="linkish" data-goto="guide" data-anchor="guide-errors">What can I do?</button></div></div>`;
   } else status.innerHTML = "";
   body.style.display = run.status === "done" ? "block" : "none";
 
@@ -560,6 +700,10 @@ async function renderDetail(fly = false) {
   $("s-removed").textContent = sm.num_removed ?? 0;
   $("settings").innerHTML = settingsText(sm);
   $("download").href = `/api/runs/${run.id}/export.geojson`;
+  $("rv-help").textContent = run.example
+    ? "This is an example run: the green and red outlines were checked by hand by the author and are locked. " +
+      "Click any outline to see why it was flagged, and compare the Before and After images below."
+    : "Open a detection, compare the before and after images, and mark it as a real landslide or a false alarm.";
 
   probLayer = L.imageOverlay(`/api/runs/${run.id}/prob.png?v=${v}`, sm.overlay_bounds, { opacity: $("r-opacity").value / 100, interactive: false });
   if ($("t-prob").checked) probLayer.addTo(map);
@@ -605,6 +749,8 @@ const styleFor = fid => {
            dashArray: reviews[fid] === "false" ? "4 4" : null, bubblingMouseEvents: false };
 };
 
+const currentRun = () => runs.find(r => r.id === selectedId);
+
 function popupContent(p) {
   const div = document.createElement("div");
   const label = reviews[p.fid];
@@ -616,11 +762,13 @@ function popupContent(p) {
     `Model confidence: ${(p.max_prob * 100).toFixed(0)}%<br>` +
     (extra.length ? `<span class="pop-muted">${extra.join("<br>")}</span><br>` : "") +
     `<span class="pop-muted">Seen in image from ${esc(p.image_date)}</span>` +
-    `<div class="pop-actions">
-       <button data-l="real" class="${label === "real" ? "on-real" : ""}">Real landslide</button>
-       <button data-l="false" class="${label === "false" ? "on-false" : ""}">False alarm</button>
-     </div>`;
-  div.querySelectorAll("button").forEach(b => b.addEventListener("click", () => setReview(p.fid, reviews[p.fid] === b.dataset.l ? null : b.dataset.l)));
+    (currentRun()?.example
+      ? `<div class="pop-muted" style="margin-top:8px">Checked by the author: <b>${label === "real" ? "real landslide" : label === "false" ? "false alarm" : "not reviewed"}</b></div>`
+      : `<div class="pop-actions">
+           <button data-l="real" class="${label === "real" ? "on-real" : ""}">Real landslide</button>
+           <button data-l="false" class="${label === "false" ? "on-false" : ""}">False alarm</button>
+         </div>`);
+  div.querySelectorAll(".pop-actions button").forEach(b => b.addEventListener("click", () => setReview(p.fid, reviews[p.fid] === b.dataset.l ? null : b.dataset.l)));
   return div;
 }
 
@@ -783,9 +931,12 @@ $("preset").addEventListener("change", e => {
 Object.entries({ "f-bs": "2023-10-15", "f-be": "2024-02-15", "f-as": "2024-10-15", "f-ae": "2025-02-15" })
   .forEach(([id, v]) => $(id).value = v);
 
+let OPTIONS = {};
+
 async function loadOptions() {
   try {
     const o = await api("/api/options");
+    OPTIONS = o;
     const sel = $("f-model");
     sel.innerHTML = o.models.length
       ? o.models.map(m => `<option value="${m.name}" ${m.name === o.default_model ? "selected" : ""}>${esc(m.label)}${m.val_f1 != null ? ` (F1 ${Number(m.val_f1).toFixed(2)})` : ""}</option>`).join("")
@@ -835,9 +986,26 @@ $("form").addEventListener("submit", async e => {
 
 // ------------------------------------------------------------------ start + live updates
 
-loadOptions();
-refreshRuns().catch(err => {
-  $("runs").innerHTML = `<p class="form-error">Couldn't reach the server: ${esc(err.message)}</p>`;
+const store = {   // browser storage can be unavailable (private windows, embeds): never let it break the page
+  get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch { /* ignore */ } },
+};
+function closeWelcome() { $("welcome").hidden = true; store.set("welcome-dismissed", "1"); }
+$("welcome-close").addEventListener("click", closeWelcome);
+$("welcome-guide").addEventListener("click", () => { closeWelcome(); showTab("guide"); $("panel").scrollTop = 0; });
+$("welcome-example").addEventListener("click", () => {
+  closeWelcome();
+  showTab("results");
+  const target = runs.find(r => r.id === OPTIONS.featured_run) ?? runs.find(r => r.example) ?? runs.find(r => r.status === "done");
+  if (target) selectRun(target.id);
+});
+
+loadOptions().finally(() => {
+  refreshRuns().then(() => {
+    if (!store.get("welcome-dismissed") && runs.some(r => r.status === "done")) $("welcome").hidden = false;
+  }).catch(err => {
+    $("runs").innerHTML = `<p class="form-error">Couldn't reach the server: ${esc(err.message)}</p>`;
+  });
 });
 setInterval(() => {
   if (runs.some(r => r.status === "queued" || r.status === "running")) refreshRuns().catch(() => {});

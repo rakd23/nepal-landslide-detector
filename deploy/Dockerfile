@@ -16,6 +16,7 @@ USER user
 ENV HOME=/home/user \
     GEOAI_ROOT=/app/model \
     MAX_QUEUE=3 \
+    DEMO_MODE=1 \
     PYTHONUNBUFFERED=1
 
 EXPOSE 7860
